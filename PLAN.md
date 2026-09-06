@@ -447,25 +447,40 @@ Confirmed test rig, which is now the target we develop against:
 | Hooks | Latest ScriptHookV + ScriptHookVDotNet |
 | Installed | gameconfig, Heap Adjuster |
 | Not installed | add-on vehicle packs, MP-in-SP unlockers |
-| Also installed | a military/police enhancer |
+| Also installed | a police OIV pack: overhauls the wanted system, police, weapons and vehicles, adds 6 stars |
 
 Good news in three parts. gameconfig and Heap Adjuster present means the large modes have
 headroom to be tested honestly. **No add-on packs is actively useful** — it forces the vanilla
 path to be the default path rather than an untested fallback, which is what shipping to other
 people demands anyway (§6.5).
 
-The military/police enhancer is the one caveat, and it cuts both ways:
+### The police OIV pack
 
-- If it's a **replace** mod (retextures or swaps vanilla models under the same names), it's
-  transparent — we reference vanilla names, your install renders them enhanced, everyone else
-  gets vanilla, and nobody needs a config change. That's the by-name design working as intended.
-- If it's an **add-on** mod (new model names), our config must never reference those names in
-  anything we ship.
+A pack that overhauls the wanted system, police, weapons, vehicles and adds 6 stars is the
+single most useful compatibility constraint we could have been given, because it validates a
+decision already made for other reasons.
 
-Either way it means **your test rig is not a clean install**, so when you report "cops feel too
-tanky" or "that vehicle handles wrong," I need to know whether that's us or the enhancer. Worth
-a quick check of which kind it is, and worth disabling it once during Drop 1 to establish a
-clean baseline.
+**We never use the wanted system.** Riot police are a relationship group that hates a target
+faction, not a wanted level applied to the world (§6.3). That was chosen because wanted levels
+are player-centric and fight us — but it also means an overhaul pack's dispatch, star logic and
+6-star tiers keep running completely untouched. The two systems never meet.
+
+Enforced rather than merely intended:
+
+- `compatibility.manageWantedSystem` defaults **off**, and every wanted-system native in the
+  codebase routes through one gate that respects it, so a later drop cannot stomp it by accident.
+- `compatibility.protectEmergencyServices` defaults **on**: cops, SWAT, army, medics and
+  firefighters are never recruited into a faction. The pack owns those peds.
+- Riot police, when they arrive, will be a **separate faction with its own relationship group** —
+  additive, not a modification of the game's police.
+
+The pack's models and stats still apply to anything we spawn, because we reference vanilla names
+only. That keeps the mod shareable rather than built for one rig, and means an installed pack
+enhances it for free.
+
+Remaining caveat: **the test rig is not a clean install.** Ped stats, weapons and vehicles all
+differ from what another player would see, so a first clean-baseline run is worth doing if it
+isn't a hassle.
 
 ## 12. Open questions
 1. **F6 or F7?** Going with **configurable, default F6** unless you say otherwise — F7 is

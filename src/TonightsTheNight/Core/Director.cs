@@ -230,7 +230,20 @@ namespace TonightsTheNight.Core
 
             // Mission peds belong to the story; hijacking them breaks quests in ways that are
             // very hard to attribute back to this mod.
-            if (Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, ped)) { return false; }
+            if (_config.GetBool("compatibility.protectMissionPeds", true) &&
+                Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, ped))
+            {
+                return false;
+            }
+
+            // Police, SWAT, army and emergency services are left alone unless a mode explicitly
+            // asks for them. A police or wanted-system overhaul owns those peds, and this mod
+            // taking them over would break that mod invisibly.
+            if (_config.GetBool("compatibility.protectEmergencyServices", true) &&
+                PedTypes.IsProtectedService(Function.Call<int>(Hash.GET_PED_TYPE, ped)))
+            {
+                return false;
+            }
 
             return true;
         }
@@ -238,14 +251,13 @@ namespace TonightsTheNight.Core
         private static bool MatchesFilter(Ped ped, string filter)
         {
             int pedType = Function.Call<int>(Hash.GET_PED_TYPE, ped);
-            const int CivMale = 4;
-            const int CivFemale = 5;
 
             switch ((filter ?? string.Empty).ToLowerInvariant())
             {
-                case "civilian": return pedType == CivMale || pedType == CivFemale;
-                case "male": return pedType == CivMale;
-                case "female": return pedType == CivFemale;
+                case "civilian": return PedTypes.IsCivilian(pedType);
+                case "male": return pedType == PedTypes.CivMale;
+                case "female": return pedType == PedTypes.CivFemale;
+                case "criminal": return pedType == PedTypes.Criminal || pedType == PedTypes.Bum;
                 case "any": return true;
                 default: return false;
             }

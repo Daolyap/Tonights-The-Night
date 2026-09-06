@@ -72,6 +72,47 @@ needs no code.
 Stock mode files carry a `"_stock": true` marker. Remove that line (or just edit the file) and
 updates will stop overwriting your version.
 
+## Compatibility with police, wanted and overhaul mods
+
+This mod is built to sit alongside police overhauls, wanted-system replacements, LSPDFR-style
+packs and 6-star mods rather than compete with them. Two design decisions do the work:
+
+**1. It never touches the wanted system.** Riot police are built from relationship groups, not
+wanted levels. That was chosen because the wanted system is player-centric and fights us — but
+the happy side effect is that it's exactly the system an overhaul pack replaces, so the two
+never collide. There is a `compatibility.manageWantedSystem` switch, it defaults to **off**, and
+it is expected to stay off. Every wanted-system call in the codebase routes through one gate
+that respects it.
+
+**2. It leaves police and emergency peds alone.** Cops, SWAT, army, medics and firefighters are
+never recruited into a faction. An overhaul pack owns those peds; this mod hijacking them would
+break that pack in ways that look like the pack's fault.
+
+```jsonc
+{
+  "compatibility": {
+    "protectEmergencyServices": true,   // leave cops, SWAT, army, medics, firefighters alone
+    "protectMissionPeds": true,         // never recruit story peds
+    "manageWantedSystem": false         // never write to the wanted system
+  }
+}
+```
+
+Both protections are also toggles in the menu under **Features**.
+
+Things that will still interact, by design and harmlessly:
+
+- **Your pack's models and stats apply to us.** If it replaces vanilla models under the same
+  names, anything this mod spawns renders with your versions automatically. We reference vanilla
+  names only, so the mod stays shareable rather than being built for one setup.
+- **Rioting near police provokes your wanted system normally.** Civilians murdering each other
+  in the street is your pack's business to respond to, and it should respond exactly as it
+  always does.
+
+When riot police arrive in a later version they'll be a separate faction with their own
+relationship group, not a modification of the game's police. Your pack's dispatch, stars and
+units keep running untouched alongside them.
+
 ## When something goes wrong
 
 `scripts/TonightsTheNight.log` records the version, what config loaded, every model or weapon

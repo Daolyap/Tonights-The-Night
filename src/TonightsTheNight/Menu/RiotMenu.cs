@@ -159,6 +159,12 @@ namespace TonightsTheNight.Menu
 
             AddToggle(_featuresMenu, "Watch Files", "features.hotReload.watchFiles", true,
                 "Reload automatically when a config file changes on disk.");
+
+            AddToggle(_featuresMenu, "Protect Police & Emergency", "compatibility.protectEmergencyServices", true,
+                "Leave cops, SWAT, army, medics and firefighters alone. Keep this on if you run a police or wanted-system overhaul.");
+
+            AddToggle(_featuresMenu, "Protect Mission Peds", "compatibility.protectMissionPeds", true,
+                "Never recruit story peds. Turning this off can break missions.");
         }
 
         private void AddToggle(NativeMenu menu, string title, string path, bool fallback, string description)

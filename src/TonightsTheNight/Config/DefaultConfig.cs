@@ -82,6 +82,17 @@ namespace TonightsTheNight.Config
             player.Set("everyoneHatesPlayer", JsonValue.Of(false));
             root.Set("player", player);
 
+            // Compatibility with other mods. These default to the conservative choice: this
+            // mod stays out of systems another mod might own.
+            JsonValue compatibility = JsonValue.NewObject();
+            compatibility.Set("protectEmergencyServices", JsonValue.Of(true));
+            compatibility.Set("protectMissionPeds", JsonValue.Of(true));
+            // Off by default and expected to stay off. Police/wanted overhauls (OIV packs,
+            // LSPDFR-style mods, 6-star replacements) own the wanted system; riot police are
+            // built from relationship groups instead, so the two never collide.
+            compatibility.Set("manageWantedSystem", JsonValue.Of(false));
+            root.Set("compatibility", compatibility);
+
             // Feature flags. Every extra is optional AND customisable: a switch plus a block.
             JsonValue features = JsonValue.NewObject();
 

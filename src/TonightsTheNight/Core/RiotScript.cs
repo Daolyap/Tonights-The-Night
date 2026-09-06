@@ -143,6 +143,7 @@ namespace TonightsTheNight.Core
                 _config.LoadAll();
                 ApplyLogLevel();
                 ReadKeybinds();
+                Compatibility.Reset();
                 _modes.Load();
                 _menu.Rebuild();
 

@@ -5,14 +5,30 @@ it has ever run in a game. Everything below is an assumption until you check it.
 
 Roughly 15 minutes. Take the log either way: `scripts/TonightsTheNight.log`.
 
+| | Test | The question it answers |
+|---|---|---|
+| T1 | It loads | Does the DLL start at all on your setup? |
+| T2 | Config files appear | Did it create its own config folder correctly? |
+| T3 | The menu | Does F6 open a working menu? |
+| T4 | **The riot itself** | **Do pedestrians actually fight each other?** |
+| T5 | **It cleans up** | **When you stop, does everyone go back to normal — and does a save/reload stay clean?** |
+| T6 | Debug overlay | Are the performance numbers sane? |
+| T7 | Hot reload | Can you retune settings without restarting the game? |
+
+T4 and T5 are the two that decide whether the design works. The rest is plumbing.
+
 ---
 
 ## Before you start
 
-Please do the first run with your **military/police enhancer disabled**. Not because it will
-break anything, but because it changes ped and vehicle stats, and I need one clean baseline to
-compare against before your rig stops being representative. Re-enable it afterwards and note
-anything that changes.
+Ideally do the first run with your **police OIV pack disabled**, so we get one clean baseline.
+It changes ped stats, weapons, vehicles and the wanted system, and without a baseline I can't
+tell whether "cops feel wrong" is us or it.
+
+If reinstalling the pack is a hassle, don't bother — this build never touches police, SWAT,
+army or emergency peds at all (see **Compatibility** in `INSTALL.md`), so the two shouldn't
+interact. Run it as-is and tell me if anything police-related changes; that itself is a useful
+result.
 
 ---
 
@@ -65,13 +81,22 @@ Stand somewhere busy — Vespucci Beach, Del Perro, downtown. Then **F6 → Riot
 
 ## T5 — It cleans up
 
+Stopping is meant to feel like the purge ending: everyone drops what they're doing and carries
+on as normal. Mechanically that means we hand every ped we touched back to the game exactly as
+we found it — original relationship group restored, combat conditioning undone, tasks cleared,
+blips deleted, and the ped released so the engine can recycle it. That is all "restore the
+world" means; there is no wind-down animation and no slow calm-down.
+
 **F6 → Stop Riot.**
 
-**Expect:** notification, blips gone, peds stop fighting and go back to normal behaviour within
-a few seconds. No lingering hostility, no stuck blips.
+**Expect:** a notification, blips gone, and peds stopping and returning to normal wandering
+within a few seconds. No lingering hostility, no stuck blips.
+
+Bodies stay where they fell — the purge ending doesn't resurrect anyone. That's intended.
 
 Then **save and reload** the game. The world should be entirely normal. This is the test that
-catches a save-poisoning bug, and it matters more than any feature.
+catches a save-poisoning bug, and it matters more than any feature: it's the difference between
+a mod you can leave installed and one that quietly ruins a playthrough.
 
 ## T6 — Debug overlay
 
