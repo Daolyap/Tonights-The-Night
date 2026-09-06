@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.1.3 — the riot was eating itself
+
+The v0.1.2 log settled the "it feels sparse" question with numbers: **281 recruited over three
+minutes, 12 still alive at the end.** The riot wasn't failing to start, it was consuming its own
+participants faster than the game could repopulate the street. Twelve active rioters at any
+moment is not a riot, and no amount of tuning conversion chance fixes it, because the limit was
+supply, not recruitment.
+
+### Changed
+
+- **Loadouts are weighted, and the stock mode is now mostly melee.** Bats, crowbars, hammers and
+  knives outweigh firearms about 5:1. A fight with bats lasts long enough to look like a riot; a
+  fight with pistols is over in seconds and leaves an empty road. Weapons accept either a bare
+  name or `{"name": ..., "weight": ...}`, so this is tunable per faction — and it's the mechanism
+  the weapon presets will be built on.
+- **Ped density raised 1.5 → 2.5.** More crowd to draw from. This is the setting that most wants
+  a gameconfig and Heap Adjuster behind it.
+
+### Added
+
+- **Churn telemetry.** The overlay and log now show `lost` alongside `recruited`, and the log
+  writes a stats line every 30 seconds. A single total at shutdown hid the shape of the run —
+  "recruited 281, active 12" only means something once you can see whether the active count was
+  climbing, flat, or collapsing.
+
 ## v0.1.2 — path fix, crowd rebalance, you are a target
 
 ### Fixed

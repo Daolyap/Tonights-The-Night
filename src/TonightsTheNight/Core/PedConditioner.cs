@@ -102,7 +102,9 @@ namespace TonightsTheNight.Core
             if (faction.Weapons.Count == 0) { return; }
             if (_random.NextDouble() > faction.ArmedChance) { return; }
 
-            string name = faction.Weapons[_random.Next(faction.Weapons.Count)];
+            string name = faction.PickWeapon(_random);
+            if (name == null) { return; }
+
             uint hash = ResolveWeapon(name);
             if (hash == 0) { return; }
 

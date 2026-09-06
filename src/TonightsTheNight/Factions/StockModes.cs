@@ -45,7 +45,16 @@ namespace TonightsTheNight.Factions
       ""armedChance"": 0.8,
       ""ammo"": 150,
       ""armour"": 0,
-      ""weapons"": [ ""Bat"", ""Crowbar"", ""Hammer"", ""Machete"", ""Pistol"", ""SNSPistol"" ],
+      // Weighted. A riot fought with bats lasts; one fought with pistols kills off the
+      // street faster than the game repopulates it and fizzles into an empty road.
+      ""weapons"": [
+        { ""name"": ""Bat"",       ""weight"": 4 },
+        { ""name"": ""Crowbar"",   ""weight"": 3 },
+        { ""name"": ""Hammer"",    ""weight"": 3 },
+        { ""name"": ""Machete"",   ""weight"": 2 },
+        { ""name"": ""Pistol"",    ""weight"": 1 },
+        { ""name"": ""SNSPistol"", ""weight"": 1 }
+      ],
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Red"" }
     },
 
@@ -57,7 +66,14 @@ namespace TonightsTheNight.Factions
       ""armedChance"": 0.8,
       ""ammo"": 150,
       ""armour"": 0,
-      ""weapons"": [ ""Bat"", ""GolfClub"", ""Knife"", ""Pistol"", ""MicroSMG"" ],
+      ""weapons"": [
+        { ""name"": ""Bat"",      ""weight"": 4 },
+        { ""name"": ""GolfClub"", ""weight"": 3 },
+        { ""name"": ""Knife"",    ""weight"": 3 },
+        { ""name"": ""Hammer"",   ""weight"": 2 },
+        { ""name"": ""Pistol"",   ""weight"": 1 },
+        { ""name"": ""MicroSMG"", ""weight"": 1 }
+      ],
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Blue"" }
     },
 
@@ -73,7 +89,7 @@ namespace TonightsTheNight.Factions
       ""share"": 0.1,
       ""armedChance"": 0.1,
       ""ammo"": 40,
-      ""weapons"": [ ""Bat"", ""Bottle"" ],
+      ""weapons"": [ ""Bottle"", ""Bat"" ],
       ""blip"": { ""enabled"": false }
     }
   },

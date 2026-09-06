@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.1.2";
+        public const string Version = "0.1.3";
 
         public static JsonValue Build()
         {
@@ -59,7 +59,10 @@ namespace TonightsTheNight.Config
             // Ped density is a per-frame native, so these are applied every tick while active.
             JsonValue density = JsonValue.NewObject();
             density.Set("enabled", JsonValue.Of(true));
-            density.Set("pedMultiplier", JsonValue.Of(1.5));
+            // A riot consumes its own participants. Without extra crowd the local population
+            // is spent in a couple of minutes and the street goes quiet. Needs a gameconfig and
+            // Heap Adjuster to be safe at this level - see INSTALL.md.
+            density.Set("pedMultiplier", JsonValue.Of(2.5));
             density.Set("vehicleMultiplier", JsonValue.Of(0.8));
             density.Set("scenarioMultiplier", JsonValue.Of(0.4));
             root.Set("density", density);

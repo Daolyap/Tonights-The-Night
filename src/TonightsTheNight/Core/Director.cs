@@ -39,6 +39,7 @@ namespace TonightsTheNight.Core
         /// <summary>Peds being calmed down after a stop, and the deadline for doing so.</summary>
         private readonly List<Ped> _pacifying = new List<Ped>();
         private int _pacifyUntil;
+        private int _nextStatsAt;
 
         public RiotMode ActiveMode { get; private set; }
         public bool IsRunning { get { return ActiveMode != null; } }
@@ -50,6 +51,13 @@ namespace TonightsTheNight.Core
         public int TrackedCount { get { return _registry.Count; } }
         public int RecruitedTotal { get; private set; }
         public int CulledTotal { get; private set; }
+
+        /// <summary>
+        /// Recruits that left the registry because they died or despawned. The gap between this
+        /// and <see cref="RecruitedTotal"/> is what tells us whether a riot is sustaining itself
+        /// or burning through the local population.
+        /// </summary>
+        public int LostTotal { get; private set; }
         public double LastTickMs { get; private set; }
         public double PeakTickMs { get; private set; }
         public int CurrentBudget { get { return _budget; } }
@@ -86,6 +94,8 @@ namespace TonightsTheNight.Core
             ActiveMode = mode;
             RecruitedTotal = 0;
             CulledTotal = 0;
+            LostTotal = 0;
+            _nextStatsAt = 0;
             PeakTickMs = 0;
             _cursor = 0;
             _budget = _config.GetInt("engine.pedsPerTick", 12);
@@ -100,7 +110,9 @@ namespace TonightsTheNight.Core
             if (!IsRunning) { return; }
 
             string id = ActiveMode.Id;
-            Log.Info("Stopping mode '" + id + "'. Recruited " + RecruitedTotal + ", culled " + CulledTotal + ", peak tick " + PeakTickMs.ToString("F2") + "ms.");
+            Log.Info("Stopping mode '" + id + "'. Recruited " + RecruitedTotal + ", lost " + LostTotal +
+                     ", culled " + CulledTotal + ", still active " + _registry.Count +
+                     ", peak tick " + PeakTickMs.ToString("F2") + "ms.");
 
             if (_config.GetBool("riot.restoreWorldOnStop", true))
             {
@@ -263,6 +275,21 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
+        /// A periodic line in the log, because a single total at shutdown hides the shape of
+        /// the run. "Recruited 281, still active 12" only means something once you can see
+        /// whether the active count was climbing, flat, or collapsing.
+        /// </summary>
+        private void ReportStats()
+        {
+            if (Game.GameTime < _nextStatsAt) { return; }
+            _nextStatsAt = Game.GameTime + 30000;
+
+            Log.Info("Riot: active " + _registry.Count + "/" + _config.GetInt("engine.maxTrackedPeds", 120) +
+                     ", recruited " + RecruitedTotal + ", lost " + LostTotal + ", culled " + CulledTotal +
+                     ", tick " + LastTickMs.ToString("F2") + "ms, budget " + _budget);
+        }
+
+        /// <summary>
         /// Expands each recruiting faction into slots proportional to its share, so a mode can
         /// say "a few rioters, mostly onlookers" without any special-casing at recruit time.
         /// </summary>
@@ -364,7 +391,8 @@ namespace TonightsTheNight.Core
         /// </summary>
         private void ProcessTracked()
         {
-            _registry.PruneDead();
+            LostTotal += _registry.PruneDead();
+            ReportStats();
 
             IReadOnlyList<TrackedPed> tracked = _registry.Tracked;
             if (tracked.Count == 0) { return; }
@@ -388,6 +416,7 @@ namespace TonightsTheNight.Core
                 if (!entry.IsUsable || !EntityRegistry.IsSameEntity(entry))
                 {
                     _registry.Remove(entry, false);
+                    LostTotal++;
                     continue;
                 }
 

@@ -34,6 +34,28 @@ class Program
         return System.IO.Path.Combine(dir.FullName, "src", "TonightsTheNight", "Factions", "StockModes.cs");
     }
 
+    static readonly string[] Guns = { "Pistol", "SNSPistol", "MicroSMG" };
+
+    static double MeleeWeight(JsonValue faction)
+    {
+        double total = 0;
+        foreach (JsonValue w in faction["weapons"].Items)
+        {
+            if (Array.IndexOf(Guns, w["name"].AsString("")) < 0) { total += w["weight"].AsDouble(1); }
+        }
+        return total;
+    }
+
+    static double GunWeight(JsonValue faction)
+    {
+        double total = 0;
+        foreach (JsonValue w in faction["weapons"].Items)
+        {
+            if (Array.IndexOf(Guns, w["name"].AsString("")) >= 0) { total += w["weight"].AsDouble(1); }
+        }
+        return total;
+    }
+
     static int Main()
     {
         Console.WriteLine("--- lenient parsing (comments, trailing commas, bare keys) ---");
@@ -73,7 +95,9 @@ class Program
         string mode = stock.Substring(a, b - a).Replace("\"\"", "\"");
         Check("stock mode parses", JsonValue.TryParse(mode, out v, out err), err);
         Check("has 3 factions", v["factions"].Count == 3, v["factions"].Count.ToString());
-        Check("mob_red weapons", v["factions"]["mob_red"]["weapons"].AsStringList().Count == 6);
+        Check("mob_red weapons", v["factions"]["mob_red"]["weapons"].Count == 6);
+        Check("weapons are weighted", v["factions"]["mob_red"]["weapons"].Items[0]["weight"].AsDouble() > 0);
+        Check("melee outweighs firearms in mob_red", MeleeWeight(v["factions"]["mob_red"]) > 3 * GunWeight(v["factions"]["mob_red"]));
         Check("bystanders mixed", v["factions"]["bystanders"]["reaction"].AsString() == "Mixed");
         Check("fightBackChance", Math.Abs(v["factions"]["bystanders"]["fightBackChance"].AsDouble() - 0.15) < 1e-9);
         Check("3 relations", v["relations"].Count == 3);
