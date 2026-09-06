@@ -69,8 +69,17 @@ namespace TonightsTheNight.Factions
         public BlipSprite BlipSprite { get; private set; }
         public BlipColor BlipColor { get; private set; }
 
-        /// <summary>Ped model names this faction spawns. Empty means conversion-only.</summary>
-        public List<string> Models { get; private set; }
+        /// <summary>How this faction spawns, when it cannot be drawn from the ambient crowd.</summary>
+        public SpawnProfile Spawn { get; private set; }
+
+        /// <summary>
+        /// The escalation phase this faction joins at. 0 means present from the start; a higher
+        /// number is what makes the military arrive late rather than at the first punch.
+        /// </summary>
+        public int FromPhase { get; private set; }
+
+        /// <summary>Accuracy override for this faction, or -1 to use the global setting.</summary>
+        public int Accuracy { get; private set; }
 
         /// <summary>
         /// Which ambient peds get recruited: "civilian", "male", "female", "any", or "none".
@@ -95,7 +104,9 @@ namespace TonightsTheNight.Factions
                 Armour = Math.Max(0, Math.Min(100, node["armour"].AsInt(0))),
                 Health = node["health"].AsInt(0),
                 ArmedChance = Clamp01(node["armedChance"].AsFloat(1f)),
-                Models = node["models"].AsStringList(),
+                Spawn = node.Has("spawn") ? SpawnProfile.FromJson(node["spawn"]) : SpawnProfile.Disabled(),
+                FromPhase = node["fromPhase"].AsInt(0),
+                Accuracy = node["accuracy"].AsInt(-1),
                 Recruits = node["recruits"].AsString("none"),
                 BlipEnabled = node["blip"]["enabled"].AsBool(true),
                 BlipSprite = ParseEnum(node["blip"]["sprite"].AsString("Standard"), BlipSprite.Standard),

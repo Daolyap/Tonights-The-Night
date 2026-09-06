@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.1.3";
+        public const string Version = "0.2.0";
 
         public static JsonValue Build()
         {
@@ -54,6 +54,7 @@ namespace TonightsTheNight.Config
             // Peds who wounded each other re-engage from vanilla AI memory after one task
             // clear, so keep calming them for a few seconds after a stop.
             riot.Set("pacifySeconds", JsonValue.Of(5));
+            riot.Set("spawnFactions", JsonValue.Of(true));
             root.Set("riot", riot);
 
             // Ped density is a per-frame native, so these are applied every tick while active.
@@ -78,6 +79,9 @@ namespace TonightsTheNight.Config
             combat.Set("seeingRange", JsonValue.Of(60));
             combat.Set("hearingRange", JsonValue.Of(60));
             combat.Set("retaskIntervalMs", JsonValue.Of(6000));
+            // Stops gunfire and screams pulling fighters out of combat and into a panic run.
+            // Turning this off makes a riot scatter the moment the first shot is fired.
+            combat.Set("blockPanicEvents", JsonValue.Of(true));
 
             // SET_PED_COMBAT_ATTRIBUTES IDs. These are community-documented rather than
             // official and are the most likely thing here to be quietly wrong, so they are
@@ -109,6 +113,15 @@ namespace TonightsTheNight.Config
             player.Set("stance", JsonValue.Of("target"));
             root.Set("player", player);
 
+            // Where the riot is. Confining it is both the cheapest performance control and the
+            // thing that produces the best scenes - one district in flames beats uniform chaos.
+            JsonValue zone = JsonValue.NewObject();
+            zone.Set("mode", JsonValue.Of("radius"));     // radius | citywide
+            zone.Set("radius", JsonValue.Of(300));
+            zone.Set("followPlayer", JsonValue.Of(true));
+            zone.Set("showOnMap", JsonValue.Of(true));
+            root.Set("zone", zone);
+
             // Compatibility with other mods. These default to the conservative choice: this
             // mod stays out of systems another mod might own.
             JsonValue compatibility = JsonValue.NewObject();
@@ -139,6 +152,52 @@ namespace TonightsTheNight.Config
             overlay.Set("y", JsonValue.Of(0.28));
             overlay.Set("scale", JsonValue.Of(0.32));
             features.Set("debugOverlay", overlay);
+
+            JsonValue escalation = JsonValue.NewObject();
+            escalation.Set("enabled", JsonValue.Of(true));
+            features.Set("escalation", escalation);
+
+            JsonValue ambience = JsonValue.NewObject();
+            ambience.Set("enabled", JsonValue.Of(true));
+            ambience.Set("setWeather", JsonValue.Of(true));
+            ambience.Set("setTime", JsonValue.Of(true));
+            ambience.Set("setTimecycle", JsonValue.Of(true));
+            features.Set("ambience", ambience);
+
+            JsonValue fires = JsonValue.NewObject();
+            fires.Set("enabled", JsonValue.Of(true));
+            fires.Set("maxActive", JsonValue.Of(8));
+            fires.Set("intervalMs", JsonValue.Of(9000));
+            fires.Set("radius", JsonValue.Of(120));
+            fires.Set("size", JsonValue.Of(20));
+            fires.Set("burnVehicles", JsonValue.Of(true));
+            features.Set("fires", fires);
+
+            JsonValue purge = JsonValue.NewObject();
+            purge.Set("enabled", JsonValue.Of(true));
+            purge.Set("startHour", JsonValue.Of(22));
+            purge.Set("durationMinutes", JsonValue.Of(12));
+            purge.Set("setClock", JsonValue.Of(true));
+            features.Set("purge", purge);
+
+            // Driving behaviour for police and military. The mission type and driving style are
+            // community-documented rather than official, so they are tunable without a rebuild.
+            JsonValue police = JsonValue.NewObject();
+            police.Set("driveThroughCrowds", JsonValue.Of(true));
+            police.Set("aggressiveness", JsonValue.Of(1.0));
+            police.Set("driverAbility", JsonValue.Of(1.0));
+            police.Set("muteSirens", JsonValue.Of(false));
+            police.Set("vehicleMission", JsonValue.Of(6));       // 6 = ram
+            police.Set("drivingStyle", JsonValue.Of(786603));
+            police.Set("cruiseSpeed", JsonValue.Of(45));
+            police.Set("targetReachedDistance", JsonValue.Of(5));
+            police.Set("straightLineDistance", JsonValue.Of(8));
+            features.Set("police", police);
+
+            JsonValue profiles = JsonValue.NewObject();
+            profiles.Set("enabled", JsonValue.Of(true));
+            profiles.Set("autoload", JsonValue.Of(""));
+            features.Set("profiles", profiles);
 
             root.Set("features", features);
             return root;

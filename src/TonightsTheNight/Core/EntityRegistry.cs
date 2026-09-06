@@ -134,6 +134,8 @@ namespace TonightsTheNight.Core
                 Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.AlwaysFight, false);
                 Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.CanFightArmedPedsWhenNotArmed, false);
                 Function.Call(Hash.SET_PED_KEEP_TASK, ped, false);
+                // Hand ambient events back, or the ped stays deaf to the world after the riot.
+                ped.BlockPermanentEvents = false;
 
                 Function.Call(Hash.CLEAR_PED_TASKS_IMMEDIATELY, ped);
                 ped.MarkAsNoLongerNeeded();

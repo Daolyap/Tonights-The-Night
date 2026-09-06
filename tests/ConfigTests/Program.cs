@@ -132,6 +132,9 @@ class Program
             Check("TryParse survives: " + (bad.Length > 20 ? bad.Substring(0, 20) : bad), ok);
         }
 
+        Console.WriteLine("--- every shipped riot mode ---");
+        failures += StockModeTests.Run();
+
         Console.WriteLine("--- every config path the code reads is declared in defaults ---");
         failures += ConfigPathCoverage.Run();
 

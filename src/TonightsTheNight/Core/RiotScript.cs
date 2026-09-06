@@ -55,6 +55,7 @@ namespace TonightsTheNight.Core
             ApplyLogLevel();
             ReadKeybinds();
 
+            Profiles.Autoload(_config);
             _modes.Load();
 
             _director = new Director(_config);

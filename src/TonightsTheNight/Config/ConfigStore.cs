@@ -81,6 +81,29 @@ namespace TonightsTheNight.Config
 
         public void ClearAllLive() { _live.Clear(); }
 
+        /// <summary>
+        /// The live overrides as a flat path -> value object. This is what a profile is: not a
+        /// copy of every setting, just the ones you actually changed, so loading a profile
+        /// layers your choices over whatever the defaults happen to be in a later version.
+        /// </summary>
+        public JsonValue ExportLive()
+        {
+            JsonValue result = JsonValue.NewObject();
+            foreach (var pair in _live) { result.Set(pair.Key, pair.Value); }
+            return result;
+        }
+
+        public void ImportLive(JsonValue node)
+        {
+            if (node == null || !node.IsObject) { return; }
+
+            foreach (var pair in node.Members) { _live[pair.Key] = pair.Value; }
+            Log.Info("Applied " + node.Count + " setting(s) from a profile.");
+
+            EventHandler handler = Reloaded;
+            if (handler != null) { handler(this, EventArgs.Empty); }
+        }
+
         public JsonValue Resolve(string path)
         {
             JsonValue live;

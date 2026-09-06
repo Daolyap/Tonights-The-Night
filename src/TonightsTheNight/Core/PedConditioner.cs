@@ -41,11 +41,20 @@ namespace TonightsTheNight.Core
             if (reaction == Reaction.Fight)
             {
                 ApplyCombatConditioning(ped);
+
+                // A faction can override marksmanship: soldiers should shoot straight while
+                // rioters flail, and one global number cannot express both.
+                if (faction.Accuracy >= 0)
+                {
+                    Function.Call(Hash.SET_PED_ACCURACY, ped, faction.Accuracy);
+                }
                 GiveWeapons(ped, faction);
                 ApplyDurability(ped, faction);
             }
             else if (reaction == Reaction.Flee || reaction == Reaction.Cower)
             {
+                // Panickers want the opposite: every ambient event should reach them.
+                ped.BlockPermanentEvents = false;
                 // Fleeing peds need the *opposite* conditioning, or they stand and trade blows.
                 Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, ped, 0, true);
                 Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.AlwaysFight, false);
@@ -68,6 +77,16 @@ namespace TonightsTheNight.Core
             {
                 // Second argument 0 with 'false' clears the flee flags entirely.
                 Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, ped, 0, false);
+            }
+
+            if (_config.GetBool("combat.blockPanicEvents", true))
+            {
+                // Clearing the flee attributes is not enough on its own. Ambient events - a
+                // gunshot, a scream, a car mounting the pavement - fire constantly during a
+                // riot and each one can pull a ped out of the fight task and into a panic run.
+                // Blocking them is the difference between a crowd that fights and a crowd that
+                // scatters the moment the first shot goes off.
+                ped.BlockPermanentEvents = true;
             }
 
             Function.Call(Hash.SET_PED_COMBAT_ABILITY, ped, _config.GetInt("combat.combatAbility", 1));

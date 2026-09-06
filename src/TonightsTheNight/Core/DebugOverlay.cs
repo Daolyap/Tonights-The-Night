@@ -33,6 +33,12 @@ namespace TonightsTheNight.Core
             if (_config.GetBool("features.debugOverlay.showCounts", true))
             {
                 sb.AppendLine("mode: " + (director.IsRunning ? director.ActiveMode.Name : "~c~idle~s~") + "  (" + modeCount + " loaded)");
+                if (director.IsRunning)
+                {
+                    sb.AppendLine("phase: " + director.Escalation.Current + " " + director.Escalation.CurrentName +
+                                  "   kills: " + director.Kills + "   fires: " + director.Ambience.ActiveFires +
+                                  (director.Purge.Active ? "   ~r~PURGE~s~" : ""));
+                }
                 sb.AppendLine("active: " + director.TrackedCount + "   recruited: " + director.RecruitedTotal +
                               "   lost: " + director.LostTotal + "   culled: " + director.CulledTotal);
             }

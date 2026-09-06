@@ -6,9 +6,19 @@ Riot modes built from **factions** — who they are, what they carry, who they h
 react when it starts. Modes and factions are JSON files, not code, so a custom faction needs no
 build step. Every optional feature is a switch with its own settings block.
 
-**Status:** Drop 1 — early. The engine, config system and one mode are in; police, military and
-the remaining modes are not. See [`PLAN.md`](PLAN.md) for the design and
-[`docs/TESTING.md`](docs/TESTING.md) for what to check.
+**Status:** v0.2.0 — playable. Eight modes, spawned factions, escalation, zones and fires are in.
+See [`CHANGELOG.md`](CHANGELOG.md) for what landed and [`PLAN.md`](PLAN.md) for the design.
+
+| Mode | |
+|---|---|
+| Pedestrian Riot | Two mobs form out of the crowd |
+| Gang War | Four gangs settle up at once |
+| Police State | Sirens on, driving through crowds |
+| Martial Law | Infantry, then armour |
+| Animal Uprising | Deliberately silly |
+| Invasion | Aliens, with weapons already in your game |
+| The Purge | Twelve minutes, then it stops |
+| Everything | All of it, escalating |
 
 ## Install
 

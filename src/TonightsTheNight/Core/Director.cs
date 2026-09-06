@@ -24,7 +24,18 @@ namespace TonightsTheNight.Core
         private readonly EntityRegistry _registry = new EntityRegistry();
         private readonly RelationshipMatrix _relationships = new RelationshipMatrix();
         private readonly PedConditioner _conditioner;
+        private readonly ModelResolver _models = new ModelResolver();
+        private readonly Spawner _spawner;
+        private readonly VehicleBehaviour _vehicles;
         private readonly Random _random = new Random();
+
+        public Escalation Escalation { get; private set; }
+        public RiotZone Zone { get; private set; }
+        public Ambience Ambience { get; private set; }
+        public PurgeClock Purge { get; private set; }
+
+        /// <summary>Recruits confirmed dead, as opposed to merely despawned. Drives escalation.</summary>
+        public int Kills { get; private set; }
         private readonly Stopwatch _stopwatch = new Stopwatch();
 
         private int _cursor;            // round-robin position in the tracked list
@@ -40,12 +51,11 @@ namespace TonightsTheNight.Core
         private readonly List<Ped> _pacifying = new List<Ped>();
         private int _pacifyUntil;
         private int _nextStatsAt;
+        private bool _playerMovedGroup;
 
         public RiotMode ActiveMode { get; private set; }
         public bool IsRunning { get { return ActiveMode != null; } }
 
-        /// <summary>The player's relationship group before we moved them into ours.</summary>
-        private int _playerOriginalGroup;
 
         // Live numbers for the debug overlay and, more importantly, for the log.
         public int TrackedCount { get { return _registry.Count; } }
@@ -66,6 +76,14 @@ namespace TonightsTheNight.Core
         {
             _config = config;
             _conditioner = new PedConditioner(config, _relationships, _random);
+            _spawner = new Spawner(config, _models, _random);
+            _vehicles = new VehicleBehaviour(config);
+
+            Escalation = new Escalation(config);
+            Zone = new RiotZone(config);
+            Ambience = new Ambience(config, _random);
+            Purge = new PurgeClock(config);
+
             _budget = config.GetInt("engine.pedsPerTick", 12);
         }
 
@@ -79,7 +97,6 @@ namespace TonightsTheNight.Core
             _config.SetModeOverrides(mode.Overrides);
             CombatAttribute.LoadOverrides(_config);
 
-            _relationships.RegisterPlayerGroup();
             foreach (Faction faction in mode.Factions)
             {
                 faction.GroupHash = _relationships.Register(faction.RelationshipGroupName);
@@ -89,9 +106,14 @@ namespace TonightsTheNight.Core
             ApplyPlayerSide(mode);
             BuildRecruitPool(mode);
 
-            _playerOriginalGroup = Function.Call<int>(Hash.GET_PED_RELATIONSHIP_GROUP_HASH, Game.Player.Character);
+            Escalation.Load(mode.Escalation);
+            Zone.Begin();
+            Ambience.Apply(mode.Ambience);
+            Purge.Begin(mode.Purge);
+            _spawner.Reset();
 
             ActiveMode = mode;
+            Kills = 0;
             RecruitedTotal = 0;
             CulledTotal = 0;
             LostTotal = 0;
@@ -120,9 +142,11 @@ namespace TonightsTheNight.Core
                 _registry.RestoreAll();
             }
 
-            // Must happen before the groups are removed, or the player is left pointing at a
-            // relationship group that no longer exists.
-            RestorePlayerGroup();
+            Ambience.Clear();
+            Zone.Clear();
+            Purge.Clear();
+            _models.Release();
+
             _relationships.Clear();
             _config.ClearModeOverrides();
             ActiveMode = null;
@@ -137,7 +161,9 @@ namespace TonightsTheNight.Core
             try
             {
                 _registry.RestoreAll();
-                RestorePlayerGroup();
+                Ambience.Clear();
+                Zone.Clear();
+                _models.Release();
                 _relationships.Clear();
                 ActiveMode = null;
                 _lastFighter = null;
@@ -163,11 +189,26 @@ namespace TonightsTheNight.Core
                 // stutter between values.
                 ApplyDensity();
 
+                if (Escalation.Update(Kills)) { AnnouncePhase(); }
+
+                if (Purge.Update())
+                {
+                    // The purge ending stops the mode: that is the event, not a side effect.
+                    Stop();
+                    return;
+                }
+
+                Zone.RefreshBlip();
+
+                Phase phase = Escalation.CurrentPhase;
+                Ambience.UpdateFires(Zone.Centre, !Escalation.Enabled || phase == null || phase.Fires);
+
                 // Recruiting and retasking are the expensive half and do not need frame rate.
                 if (Game.GameTime >= _nextWorkAt)
                 {
                     _nextWorkAt = Game.GameTime + _config.GetInt("engine.workIntervalMs", 50);
                     Recruit();
+                    SpawnWaves();
                     ProcessTracked();
                 }
             }
@@ -238,6 +279,7 @@ namespace TonightsTheNight.Core
             {
                 if (converted >= _budget) { break; }
                 if (!IsRecruitable(ped, player)) { continue; }
+                if (!Zone.Contains(ped.Position)) { continue; }
                 if (_random.NextDouble() > chance) { continue; }
 
                 // People sharing a car are travelling together; putting them on opposing sides
@@ -275,6 +317,54 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
+        /// Spawns the factions that have no ambient equivalent — soldiers, aliens, SWAT waves.
+        /// Gated on the escalation phase, which is what makes the army arrive late rather than
+        /// turning up to the first thrown punch.
+        /// </summary>
+        private void SpawnWaves()
+        {
+            if (!_config.GetBool("riot.spawnFactions", true)) { return; }
+
+            _spawner.NoteAliveCounts(_registry.Tracked);
+
+            foreach (Faction faction in ActiveMode.Factions)
+            {
+                if (!Escalation.Allows(faction.FromPhase)) { continue; }
+                if (!_spawner.WaveDue(faction)) { continue; }
+
+                List<Ped> wave = _spawner.SpawnWave(faction, Zone.Centre);
+                if (wave.Count == 0) { continue; }
+
+                Ped target = _lastFighter != null && _lastFighter.Exists() ? _lastFighter : Game.Player.Character;
+
+                foreach (Ped ped in wave)
+                {
+                    Reaction reaction = faction.ResolveReaction(_random);
+                    TrackedPed entry = _registry.Add(ped, faction, reaction, true);
+                    _conditioner.Apply(ped, faction, reaction, _lastFighter);
+                    entry.LastTaskedAt = Game.GameTime;
+
+                    AttachBlip(entry);
+
+                    Vehicle vehicle = ped.CurrentVehicle;
+                    if (vehicle != null && vehicle.Exists() && vehicle.Driver == ped)
+                    {
+                        _vehicles.Apply(ped, vehicle, faction, target);
+                    }
+                }
+
+                RecruitedTotal += wave.Count;
+                Log.Debug("Spawned " + wave.Count + " for faction '" + faction.Id + "'.");
+            }
+        }
+
+        private void AnnouncePhase()
+        {
+            GTA.UI.Notification.Show("~r~" + Escalation.CurrentName + "~s~");
+            GTA.UI.Screen.ShowSubtitle("~r~" + Escalation.CurrentName.ToUpperInvariant() + "~s~", 4000);
+        }
+
+        /// <summary>
         /// A periodic line in the log, because a single total at shutdown hides the shape of
         /// the run. "Recruited 281, still active 12" only means something once you can see
         /// whether the active count was climbing, flat, or collapsing.
@@ -285,7 +375,9 @@ namespace TonightsTheNight.Core
             _nextStatsAt = Game.GameTime + 30000;
 
             Log.Info("Riot: active " + _registry.Count + "/" + _config.GetInt("engine.maxTrackedPeds", 120) +
-                     ", recruited " + RecruitedTotal + ", lost " + LostTotal + ", culled " + CulledTotal +
+                     ", recruited " + RecruitedTotal + ", lost " + LostTotal + ", kills " + Kills +
+                     ", culled " + CulledTotal + ", fires " + Ambience.ActiveFires +
+                     ", phase " + Escalation.Current + " '" + Escalation.CurrentName + "'" +
                      ", tick " + LastTickMs.ToString("F2") + "ms, budget " + _budget);
         }
 
@@ -301,6 +393,7 @@ namespace TonightsTheNight.Core
             foreach (Faction faction in mode.Factions)
             {
                 if (string.Equals(faction.Recruits, "none", StringComparison.OrdinalIgnoreCase)) { continue; }
+                if (!Escalation.Allows(faction.FromPhase)) { continue; }
 
                 int slots = (int)Math.Round(faction.Share * 10f);
                 if (slots < 1) { slots = 1; }
@@ -415,6 +508,8 @@ namespace TonightsTheNight.Core
 
                 if (!entry.IsUsable || !EntityRegistry.IsSameEntity(entry))
                 {
+                    if (entry.Ped != null && entry.Ped.Exists() && entry.Ped.IsDead) { Kills++; }
+
                     _registry.Remove(entry, false);
                     LostTotal++;
                     continue;
@@ -591,19 +686,28 @@ namespace TonightsTheNight.Core
             if (IsRunning) { ApplyPlayerSide(ActiveMode); }
         }
 
+        /// <summary>
+        /// Points each faction's hostility at the vanilla PLAYER group rather than moving the
+        /// player into a group of ours. Joining a side is the one case where the player really
+        /// does change group, and it is restored on stop.
+        /// </summary>
         private void ApplyPlayerSide(RiotMode mode)
         {
             string side = _config.GetString("player.side", "neutral");
-
             Faction joined = string.Equals(side, "neutral", StringComparison.OrdinalIgnoreCase) ? null : mode.Find(side);
-            int playerGroup = joined != null ? joined.GroupHash : _relationships.PlayerGroup;
-
-            _relationships.ApplyToPed(Game.Player.Character, playerGroup);
 
             if (joined != null)
             {
+                _relationships.ApplyToPed(Game.Player.Character, joined.GroupHash);
+                _playerMovedGroup = true;
                 Log.Info("Player joined faction '" + joined.Id + "'.");
                 return;
+            }
+
+            if (_playerMovedGroup)
+            {
+                RelationshipMatrix.RestorePed(Game.Player.Character, RelationshipMatrix.VanillaPlayerGroup);
+                _playerMovedGroup = false;
             }
 
             int stance = ParseStance(_config.GetString("player.stance", "target"), mode.PlayerRelationship);
@@ -613,7 +717,7 @@ namespace TonightsTheNight.Core
                 _relationships.Set(_relationships.PlayerGroup, faction.GroupHash, RelationshipMatrix.Neutral);
             }
 
-            Log.Info("Player stance: " + stance + " (0 companion .. 5 hate).");
+            Log.Info("Player stance: " + stance + " (0 companion .. 5 hate), vanilla PLAYER group kept.");
         }
 
         /// <summary>
@@ -635,23 +739,5 @@ namespace TonightsTheNight.Core
             }
         }
 
-        /// <summary>
-        /// Puts the player back in their vanilla group. Skipping this leaves them assigned to a
-        /// group we are about to delete, which is exactly the kind of quiet damage that only
-        /// shows up as "the world felt wrong after I stopped it".
-        /// </summary>
-        private void RestorePlayerGroup()
-        {
-            try
-            {
-                int target = _playerOriginalGroup != 0 ? _playerOriginalGroup : Game.GenerateHash("PLAYER");
-                Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, Game.Player.Character, target);
-                _playerOriginalGroup = 0;
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Could not restore the player's relationship group", ex);
-            }
-        }
     }
 }

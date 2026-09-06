@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.2.0 — the rest of the mod
+
+All eight riot modes, spawned factions, escalation, zones, fires, weather and profiles.
+
+### Fixed — the bug behind both symptoms
+
+**Police ignored you, and rioters attacked you when set to Ignored.** One cause: the mod moved
+the player into its own relationship group. Every vanilla system that keys off `PLAYER` —
+police response most visibly — stopped applying, because you were no longer in the group their
+hostility is declared against. Factions now point their hostility *at* the vanilla `PLAYER`
+group instead of the player being moved out of it. Your OIV pack's police should behave normally
+again.
+
+**Everyone ran off.** Clearing a ped's flee attributes isn't enough: ambient events fire
+constantly during a riot — a gunshot, a scream, a car mounting the pavement — and each one can
+pull a ped out of its fight task into a panic run. Fighters now block those events; panickers
+still receive them. This is the difference between a crowd that fights and one that scatters at
+the first shot.
+
+### Added — seven new modes
+
+| Mode | What it is |
+|---|---|
+| **Gang War** | Four gangs settle up at once, spawned with their own vehicles and colours |
+| **Police State** | Sirens running, driving through crowds, NOOSE arriving in phase two |
+| **Martial Law** | Infantry, then an armoured column |
+| **Animal Uprising** | Coyotes, mountain lions and boars. Deliberately silly |
+| **Invasion** | Aliens with the Up-n-Atomizer, Unholy Hellbringer and Widowmaker — all already in your game files |
+| **The Purge** | Twelve minutes, announcement, countdown, then it ends and everyone goes home |
+| **Everything** | All of it, escalating through four phases |
+
+### Added — systems
+
+- **Spawned factions.** Soldiers, police, aliens and animals have no ambient equivalent to
+  convert, so they arrive in waves, on foot or in vehicles, capped per faction.
+- **Escalation phases.** Riots build. Phases advance on elapsed time *or* body count, so a quiet
+  riot still progresses and a bloodbath escalates immediately. Factions declare which phase they
+  join at — that's what makes the army arrive late rather than at the first punch.
+- **Riot zones.** Radius or citywide, optionally following you, drawn on the map. The cheapest
+  performance control there is.
+- **Police driving.** Sirens, aggression, and `SET_PED_STEERS_AROUND_PEDS(false)` — the one
+  native that turns "a police car arrives" into "a police car arrives through the crowd". Still
+  no contact with the wanted system.
+- **Fires, weather, time and colour grading** per mode, all individually switchable.
+- **Profiles.** Five slots, storing only the settings you changed so they survive updates.
+- **Skip Phase** in the menu, for testing and impatience.
+
+### Testing
+
+Every shipped mode is now validated in CI: relations reference real factions, factions can
+actually get members, spawn caps are sane, `fromPhase` exists, and model names look like game
+names rather than SHVDN enum names — `s_m_y_marine_01`, not `Marine01SMY`, which compiles fine
+and resolves to nothing.
+
 ## v0.1.3 — the riot was eating itself
 
 The v0.1.2 log settled the "it feels sparse" question with numbers: **281 recruited over three

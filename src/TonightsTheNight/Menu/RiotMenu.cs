@@ -30,7 +30,11 @@ namespace TonightsTheNight.Menu
         private NativeMenu _modeMenu;
         private NativeMenu _tuningMenu;
         private NativeMenu _featuresMenu;
+        private NativeMenu _zoneMenu;
+        private NativeMenu _profileMenu;
         private NativeItem _stopItem;
+        private NativeItem _phaseItem;
+        private int _profileSlot = 1;
 
         public RiotMenu(ConfigStore config, Director director, ModeLibrary modes, Action reloadRequested)
         {
@@ -59,7 +63,20 @@ namespace TonightsTheNight.Menu
 
             BuildModeMenu();
             BuildTuningMenu();
+            BuildZoneMenu();
             BuildFeaturesMenu();
+            BuildProfileMenu();
+
+            _phaseItem = new NativeItem("Skip To Next Phase", "Force the riot to escalate now instead of waiting.");
+            _phaseItem.Activated += (sender, args) =>
+            {
+                if (!_director.Escalation.Advance())
+                {
+                    GTA.UI.Notification.Show("~o~Already at the final phase.");
+                }
+                RefreshStopItem();
+            };
+            _root.Add(_phaseItem);
 
             _stopItem = new NativeItem("Stop Riot", "Restore the world and release every ped we took over.");
             _stopItem.Activated += (sender, args) =>
@@ -177,11 +194,107 @@ namespace TonightsTheNight.Menu
                 "Stops fighters breaking off and running. Turn off for a more realistic crowd.");
         }
 
+        private void BuildZoneMenu()
+        {
+            _zoneMenu = new NativeMenu("Tonight's The Night", "RIOT ZONE");
+            _pool.Add(_zoneMenu);
+            AddSubMenu(_zoneMenu, "Riot Zone", "Confine the riot, or let it run citywide.");
+
+            string[] labels = { "Radius Around You", "Citywide" };
+            string[] values = { "radius", "citywide" };
+
+            var mode = new NativeListItem<string>("Extent",
+                "Citywide costs frames and loses the contrast of one district in flames while the rest carries on.",
+                labels);
+            mode.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("zone.mode", "radius")));
+            mode.ItemChanged += (sender, args) => _config.SetLive("zone.mode", JsonValue.Of(values[mode.SelectedIndex]));
+            _zoneMenu.Add(mode);
+            _refreshers.Add(() => mode.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("zone.mode", "radius"))));
+
+            AddRangeSlider(_zoneMenu, "Radius", "zone.radius", 300, 100, 900, 50,
+                "How far the riot reaches. The single most effective performance control here.");
+
+            AddToggle(_zoneMenu, "Zone Follows You", "zone.followPlayer", true,
+                "On: the riot travels with you. Off: it stays where you started it.");
+
+            AddToggle(_zoneMenu, "Show Zone On Map", "zone.showOnMap", true,
+                "Draw the riot zone as a circle on the minimap.");
+        }
+
+        private void BuildProfileMenu()
+        {
+            _profileMenu = new NativeMenu("Tonight's The Night", "PROFILES");
+            _pool.Add(_profileMenu);
+            AddSubMenu(_profileMenu, "Profiles", "Save the settings you have changed and come back to them.");
+
+            var slots = new string[Profiles.Slots];
+            for (int i = 0; i < Profiles.Slots; i++) { slots[i] = "Slot " + (i + 1); }
+
+            var picker = new NativeListItem<string>("Slot", "Which slot to save to or load from.", slots);
+            picker.ItemChanged += (sender, args) => _profileSlot = picker.SelectedIndex + 1;
+            _profileMenu.Add(picker);
+
+            var save = new NativeItem("Save Settings To Slot",
+                "Stores only the settings you changed, so a profile still makes sense after an update.");
+            save.Activated += (sender, args) =>
+            {
+                GTA.UI.Notification.Show(Profiles.Save(_profileSlot, _config)
+                    ? "~g~Saved~s~ to slot " + _profileSlot + "."
+                    : "~o~Nothing to save~s~ - no settings changed this session.");
+            };
+            _profileMenu.Add(save);
+
+            var load = new NativeItem("Load Slot", "Apply a saved profile over your current settings.");
+            load.Activated += (sender, args) =>
+            {
+                if (Profiles.Load(_profileSlot, _config))
+                {
+                    Rebuild();
+                    GTA.UI.Notification.Show("~g~Loaded~s~ slot " + _profileSlot + ".");
+                }
+                else
+                {
+                    GTA.UI.Notification.Show("~o~Slot " + _profileSlot + " is empty.");
+                }
+            };
+            _profileMenu.Add(load);
+
+            var clear = new NativeItem("Clear Slot", "Delete the profile in this slot.");
+            clear.Activated += (sender, args) =>
+            {
+                GTA.UI.Notification.Show(Profiles.Delete(_profileSlot)
+                    ? "~g~Cleared~s~ slot " + _profileSlot + "."
+                    : "~o~Slot " + _profileSlot + " was already empty.");
+            };
+            _profileMenu.Add(clear);
+        }
+
         private void BuildFeaturesMenu()
         {
             _featuresMenu = new NativeMenu("Tonight's The Night", "FEATURES");
             _pool.Add(_featuresMenu);
             AddSubMenu(_featuresMenu, "Features", "Optional extras and mod-compatibility switches.");
+
+            AddToggle(_featuresMenu, "Escalation Phases", "features.escalation.enabled", true,
+                "Off: every faction is present from the start, including the military.");
+
+            AddToggle(_featuresMenu, "Fires And Debris", "features.fires.enabled", true,
+                "Burning cars and street fires once the riot reaches its second phase.");
+
+            AddRangeSlider(_featuresMenu, "Max Fires", "features.fires.maxActive", 8, 0, 24, 2,
+                "How many fires can burn at once.");
+
+            AddToggle(_featuresMenu, "Weather And Lighting", "features.ambience.enabled", true,
+                "Let a mode set the weather, time of day and colour grade.");
+
+            AddToggle(_featuresMenu, "Purge Timer", "features.purge.enabled", true,
+                "The countdown and curfew in Purge mode. Off makes it run indefinitely.");
+
+            AddToggle(_featuresMenu, "Spawn Factions", "riot.spawnFactions", true,
+                "Off: only ambient pedestrians are used. No police, military, aliens or animals.");
+
+            AddToggle(_featuresMenu, "Drive Through Crowds", "features.police.driveThroughCrowds", true,
+                "Police and military drivers stop steering around people.");
 
             AddToggle(_featuresMenu, "Debug Overlay", "features.debugOverlay.enabled", false,
                 "On-screen counters. Logging happens either way.");
@@ -284,6 +397,11 @@ namespace TonightsTheNight.Menu
         {
             _stopItem.Enabled = _director.IsRunning;
             _stopItem.Title = _director.IsRunning ? "Stop Riot" : "Stop Riot (nothing running)";
+
+            _phaseItem.Enabled = _director.IsRunning && _director.Escalation.Enabled;
+            _phaseItem.Title = _director.IsRunning
+                ? "Skip Phase (now: " + _director.Escalation.CurrentName + ")"
+                : "Skip Phase (nothing running)";
         }
     }
 }

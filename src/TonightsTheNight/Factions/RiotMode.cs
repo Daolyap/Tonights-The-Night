@@ -28,6 +28,15 @@ namespace TonightsTheNight.Factions
         /// <summary>Config layer 3. Lets Purge force night without touching your globals.</summary>
         public JsonValue Overrides { get; private set; }
 
+        /// <summary>Phase definitions, if this mode escalates.</summary>
+        public JsonValue Escalation { get; private set; }
+
+        /// <summary>Weather, time and colour grade for this mode.</summary>
+        public JsonValue Ambience { get; private set; }
+
+        /// <summary>Countdown and curfew, for Purge and anything shaped like it.</summary>
+        public JsonValue Purge { get; private set; }
+
         /// <summary>How this mode treats the player when they have not picked a side.</summary>
         public int PlayerRelationship { get; private set; }
 
@@ -41,6 +50,9 @@ namespace TonightsTheNight.Factions
                 Factions = new List<Faction>(),
                 Relations = new List<Relation>(),
                 Overrides = node["config"],
+                Escalation = node["escalation"],
+                Ambience = node["ambience"],
+                Purge = node["purge"],
                 PlayerRelationship = ParseRelationship(node["playerRelationship"].AsString("neutral"))
             };
 

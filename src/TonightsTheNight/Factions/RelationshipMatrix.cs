@@ -23,14 +23,22 @@ namespace TonightsTheNight.Factions
         public const int Dislike = 4;
         public const int Hate = 5;
 
-        public const string PlayerGroupName = "TTN_PLAYER";
+        /// <summary>
+        /// The vanilla group the player is in, and must stay in.
+        ///
+        /// Moving the player into a custom group breaks every vanilla system that keys off
+        /// PLAYER — most visibly the police, who stop responding to you because their hatred is
+        /// declared against PLAYER and you are no longer in it. Factions are pointed at this
+        /// group instead of the player being moved into theirs.
+        /// </summary>
+        public const string VanillaPlayerGroup = "PLAYER";
 
         private readonly List<int> _registered = new List<int>();
         private readonly Dictionary<string, int> _byName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        public int PlayerGroup { get; private set; }
+        /// <summary>Hash of the vanilla PLAYER group — what factions point their hostility at.</summary>
+        public int PlayerGroup { get { return unchecked((int)Game.GenerateHash(VanillaPlayerGroup)); } }
 
-        /// <summary>The player's own group, so they can be a target, an ally, or press.</summary>
         public int Register(string name)
         {
             int existing;
@@ -51,11 +59,6 @@ namespace TonightsTheNight.Factions
             _byName[name] = hash;
             Log.Debug("Registered relationship group " + name + " (" + hash + ").");
             return hash;
-        }
-
-        public void RegisterPlayerGroup()
-        {
-            PlayerGroup = Register(PlayerGroupName);
         }
 
         /// <summary>
@@ -104,7 +107,6 @@ namespace TonightsTheNight.Factions
             Log.Debug("Removed " + _registered.Count + " relationship group(s).");
             _registered.Clear();
             _byName.Clear();
-            PlayerGroup = 0;
         }
     }
 }
