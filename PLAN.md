@@ -381,27 +381,45 @@ config hot-reload, and an in-game overlay so your feedback is precise.
 
 ---
 
-## 9. Milestones
+## 9. Delivery: three drops, not nine milestones
 
-Each one ends in a build you can drop in and test in under five minutes.
+Revised after the "why phases?" question. The nine-milestone cadence was over-cautious. There is
+exactly **one** thing worth gating on, and it isn't feature complexity — it's that I cannot run
+the game. Every line I write is an untested assumption about how GTA's AI natives actually
+behave. Hand you 6,000 lines that crash on load and we've learned one bit of information and
+burned a test session.
 
-| # | Deliverable | Your test |
-|---|---|---|
-| **M0** | Skeleton. Loads, logs a version banner, F6 opens an empty LemonUI menu. Four-layer config, **flag + settings system**, **hot-reload** (9), logging. CI publishes the DLL. | Does it load on *your* setup, and does editing `user.json` + hot-reloading take effect? |
-| **M1** | Faction engine: relationship matrix, conversion sweep, loadouts, blips, cleanup. One mode: Pedestrians. | Do peds actually fight? Does stopping restore the world? |
-| **M2** | Menu v1: mode picker, intensity, **riot zones** (3), faction toggles, weapon preset picker, **debug overlay** (8), and a settings page per extra. | Is it navigable, does confining the riot to a zone hold, and can you retune every extra without leaving the game? |
-| **M3** | Police response + civilian reaction model (flee / fight / mixed slider) + **pick a side** (4). | The centrepiece — does "sirens on, ploughing through crowds" actually read right? |
-| **M4** | Military, roadblocks, model-by-name loader with fallbacks. | Do your add-on/online vehicles resolve? Does it degrade cleanly without them? |
-| **M5** | Criminals (gang territories), Animals, Aliens. **Escalation phases** (2), **fires and debris** (1), **weather/timecycle** (6). | Are animals worth keeping, or a joke mode? Does a riot that builds feel better than one that just is? |
-| **M6** | **Purge specifics** (5) — countdown, curfew, announcement — and Everything mode. | Where does performance break, and at what ped count? |
-| **M7** | Custom faction builder in-menu, weapon presets, **named profiles** (10) with import/export. | Can you build a faction and save a tuned setup without touching JSON? |
-| **M8** | **Looting** (7), perf pass, docs, release packaging. | Ship it. |
+So: one small gate, then bulk.
 
-M0–M3 is the honest vertical slice. If M3 feels good, the rest is content.
+### Drop 1 — the smoke test *(the only real gate)*
 
-Every extra lands behind its own flag with its own settings block, so anything that misbehaves
-in the field can be switched off — or retuned — without waiting on a rebuild. The numbers in
-brackets map to the §7 table.
+Loads, logs, F6 menu, four-layer config with hot-reload, faction engine, and one working mode
+(pedestrian riot) so it's not a boring five minutes. Proves the whole approach on **your**
+machine: that a DLL built my way loads under your SHV/SHVDN, that configs parse, that
+relationship groups and the conversion sweep actually make peds fight, and that stopping
+restores the world cleanly.
+
+Everything after this sits on that foundation. If the conversion sweep has a wrong native flag,
+that bug would otherwise show up in fires, looting, police and phases simultaneously, and the
+fix would touch thirty files. Proving it once, early, is worth one test session.
+
+### Drop 2 — the whole mod
+
+All factions, all eight modes, police and military response, and all ten extras. No trickling.
+
+### Drop 3 — whatever Drop 2 reveals
+
+Fixes, perf pass, docs, release packaging.
+
+### Why this is safe: the flags are the debugger
+
+The feature-flag architecture (§5.5) is what makes a big Drop 2 viable rather than reckless.
+When something misbehaves you don't wait on me to rebuild a bisect — you toggle subsystems off
+in the menu until it stops, and tell me which one. A monolith you can bisect at runtime behaves
+like small increments without costing round trips.
+
+The debug overlay and hot-reload land in **Drop 1** for the same reason: they're not features,
+they're the instruments that make everything after them diagnosable.
 
 ---
 
@@ -419,16 +437,42 @@ brackets map to the §7 table.
 
 ---
 
-## 11. Open questions
+## 11. Reference environment
 
-1. ~~Which edition do you run?~~ **Answered: Legacy.** Reference target set (§8.3).
-2. **What's already installed?** ScriptHookV, SHVDN (which one), gameconfig, Heap Adjuster,
-   LemonUI, any add-on vehicle packs or MP-in-SP unlockers. Changes what M4 can assume.
-3. **F6 or F7?** Going with **configurable, default F6** unless you say otherwise — F7 is
+Confirmed test rig, which is now the target we develop against:
+
+| | |
+|---|---|
+| Game | **GTA V Legacy**, latest |
+| Hooks | Latest ScriptHookV + ScriptHookVDotNet |
+| Installed | gameconfig, Heap Adjuster |
+| Not installed | add-on vehicle packs, MP-in-SP unlockers |
+| Also installed | a military/police enhancer |
+
+Good news in three parts. gameconfig and Heap Adjuster present means the large modes have
+headroom to be tested honestly. **No add-on packs is actively useful** — it forces the vanilla
+path to be the default path rather than an untested fallback, which is what shipping to other
+people demands anyway (§6.5).
+
+The military/police enhancer is the one caveat, and it cuts both ways:
+
+- If it's a **replace** mod (retextures or swaps vanilla models under the same names), it's
+  transparent — we reference vanilla names, your install renders them enhanced, everyone else
+  gets vanilla, and nobody needs a config change. That's the by-name design working as intended.
+- If it's an **add-on** mod (new model names), our config must never reference those names in
+  anything we ship.
+
+Either way it means **your test rig is not a clean install**, so when you report "cops feel too
+tanky" or "that vehicle handles wrong," I need to know whether that's us or the enhancer. Worth
+a quick check of which kind it is, and worth disabling it once during Drop 1 to establish a
+clean baseline.
+
+## 12. Open questions
+1. **F6 or F7?** Going with **configurable, default F6** unless you say otherwise — F7 is
    already taken by both Los Santos Riot Mod and Ped Riot/Chaos Mode, F10 by PedPurge. We won't
    try to detect clashes, just document them.
-4. **Story mode only, or should FiveM be on the roadmap?** It's a different runtime; assuming
+2. **Story mode only, or should FiveM be on the roadmap?** It's a different runtime; assuming
    single-player unless you say otherwise.
-5. ~~Cut list.~~ **Answered: all ten are in**, each optional and customisable (§7), scheduled
+3. ~~Cut list.~~ **Answered: all ten are in**, each optional and customisable (§7), scheduled
    across M0–M8. Nothing left open here — the remaining question is whether any *default* in
    the §7 table is wrong, and that's cheaper to answer by playing it than by guessing now.

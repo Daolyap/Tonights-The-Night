@@ -1,0 +1,226 @@
+using System;
+using System.Collections.Generic;
+using LemonUI;
+using LemonUI.Menus;
+using TonightsTheNight.Config;
+using TonightsTheNight.Core;
+using TonightsTheNight.Factions;
+using TonightsTheNight.Util;
+
+namespace TonightsTheNight.Menu
+{
+    /// <summary>
+    /// The mod menu.
+    ///
+    /// Every control here writes to the config store's live layer rather than to a field, so
+    /// what you change in the menu, what you write in user.json, and what a mode overrides are
+    /// all the same mechanism. A setting can therefore be tuned mid-riot and, later, saved to
+    /// a profile without any of it being special-cased.
+    /// </summary>
+    public sealed class RiotMenu
+    {
+        private readonly ObjectPool _pool = new ObjectPool();
+        private readonly List<Action> _refreshers = new List<Action>();
+        private readonly ConfigStore _config;
+        private readonly Director _director;
+        private readonly ModeLibrary _modes;
+        private readonly Action _reloadRequested;
+
+        private NativeMenu _root;
+        private NativeMenu _modeMenu;
+        private NativeMenu _tuningMenu;
+        private NativeMenu _featuresMenu;
+        private NativeItem _stopItem;
+
+        public RiotMenu(ConfigStore config, Director director, ModeLibrary modes, Action reloadRequested)
+        {
+            _config = config;
+            _director = director;
+            _modes = modes;
+            _reloadRequested = reloadRequested;
+
+            Build();
+        }
+
+        public bool Visible
+        {
+            get { return _root.Visible; }
+            set { _root.Visible = value; }
+        }
+
+        public void Toggle() { _root.Visible = !_root.Visible; }
+
+        public void Process() { _pool.Process(); }
+
+        private void Build()
+        {
+            _root = new NativeMenu("Tonight's The Night", "RIOT CONTROL");
+            _pool.Add(_root);
+
+            BuildModeMenu();
+            BuildTuningMenu();
+            BuildFeaturesMenu();
+
+            _stopItem = new NativeItem("Stop Riot", "Restore the world and release every ped we took over.");
+            _stopItem.Activated += (sender, args) =>
+            {
+                _director.Stop();
+                RefreshStopItem();
+            };
+            _root.Add(_stopItem);
+
+            var reload = new NativeItem("Reload Config", "Re-read defaults.json, user.json and every mode file from disk.");
+            reload.Activated += (sender, args) => _reloadRequested();
+            _root.Add(reload);
+
+            _root.Shown += (sender, args) => RefreshStopItem();
+            RefreshStopItem();
+        }
+
+        private void BuildModeMenu()
+        {
+            _modeMenu = new NativeMenu("Riot Modes", "START A MODE");
+            _pool.Add(_modeMenu);
+            _root.AddSubMenu(_modeMenu);
+            PopulateModes();
+        }
+
+        private void PopulateModes()
+        {
+            _modeMenu.Clear();
+
+            if (_modes.Modes.Count == 0)
+            {
+                _modeMenu.Add(new NativeItem("No modes found", "Check scripts/TonightsTheNight/modes/ and the log."));
+                return;
+            }
+
+            foreach (RiotMode mode in _modes.Modes)
+            {
+                RiotMode captured = mode;
+                var item = new NativeItem(mode.Name, string.IsNullOrEmpty(mode.Description) ? "Start this mode." : mode.Description);
+                item.Activated += (sender, args) =>
+                {
+                    try
+                    {
+                        _director.Start(captured);
+                        RefreshStopItem();
+                        _root.Visible = false;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("Could not start mode '" + captured.Id + "'", ex);
+                        GTA.UI.Notification.Show("~r~Could not start that mode. See the log.");
+                    }
+                };
+                _modeMenu.Add(item);
+            }
+        }
+
+        private void BuildTuningMenu()
+        {
+            _tuningMenu = new NativeMenu("Tuning", "LIVE SETTINGS");
+            _pool.Add(_tuningMenu);
+            _root.AddSubMenu(_tuningMenu);
+
+            AddPercentSlider(_tuningMenu, "Conversion Chance", "riot.conversionChance", 0.85f,
+                "How likely a nearby pedestrian is to be pulled into a faction.");
+
+            AddRangeSlider(_tuningMenu, "Recruit Radius", "riot.recruitRadius", 180, 50, 400, 25,
+                "How far from you peds get recruited. Bigger is not better - it costs frames.");
+
+            AddRangeSlider(_tuningMenu, "Max Tracked Peds", "engine.maxTrackedPeds", 120, 20, 300, 20,
+                "The hard ceiling. Raise it only if you have a gameconfig and Heap Adjuster.");
+
+            AddRangeSlider(_tuningMenu, "Accuracy", "combat.accuracy", 20, 0, 100, 5,
+                "Rioter marksmanship. Low is realistic; high turns a riot into a massacre.");
+
+            AddPercentSlider(_tuningMenu, "Ped Density", "density.pedMultiplier", 1.5f,
+                "Ambient crowd multiplier, applied every frame while a mode runs.", 3f);
+
+            AddToggle(_tuningMenu, "Blips", "blips.enabled", true,
+                "Faction blips on the minimap. Capped and distance-limited, but still not free.");
+
+            AddToggle(_tuningMenu, "Never Flee", "combat.neverFlee", true,
+                "Stops fighters breaking off and running. Turn off for a more realistic crowd.");
+        }
+
+        private void BuildFeaturesMenu()
+        {
+            _featuresMenu = new NativeMenu("Features", "OPTIONAL EXTRAS");
+            _pool.Add(_featuresMenu);
+            _root.AddSubMenu(_featuresMenu);
+
+            AddToggle(_featuresMenu, "Debug Overlay", "features.debugOverlay.enabled", false,
+                "On-screen counters. Logging happens either way.");
+
+            AddToggle(_featuresMenu, "Hot Reload", "features.hotReload.enabled", true,
+                "Re-read config files without restarting the game.");
+
+            AddToggle(_featuresMenu, "Watch Files", "features.hotReload.watchFiles", true,
+                "Reload automatically when a config file changes on disk.");
+        }
+
+        private void AddToggle(NativeMenu menu, string title, string path, bool fallback, string description)
+        {
+            var item = new NativeCheckboxItem(title, description, _config.GetBool(path, fallback));
+            item.CheckboxChanged += (sender, args) => _config.SetLive(path, JsonValue.Of(item.Checked));
+            menu.Add(item);
+            _refreshers.Add(() => item.Checked = _config.GetBool(path, fallback));
+        }
+
+        private void AddPercentSlider(NativeMenu menu, string title, string path, float fallback, string description, float scale = 1f)
+        {
+            int steps = 20;
+            float current = _config.GetFloat(path, fallback);
+            var item = new NativeSliderItem(title, description, steps, (int)Math.Round(current / scale * steps));
+            item.ValueChanged += (sender, args) => _config.SetLive(path, JsonValue.Of(item.Value / (double)steps * scale));
+            menu.Add(item);
+            _refreshers.Add(() => item.Value = (int)Math.Round(_config.GetFloat(path, fallback) / scale * steps));
+        }
+
+        private void AddRangeSlider(NativeMenu menu, string title, string path, int fallback, int min, int max, int step, string description)
+        {
+            int steps = (max - min) / step;
+            int current = _config.GetInt(path, fallback);
+            int index = Math.Max(0, Math.Min(steps, (current - min) / step));
+
+            var item = new NativeSliderItem(title, description, steps, index);
+            item.ValueChanged += (sender, args) => _config.SetLive(path, JsonValue.Of(min + item.Value * step));
+            menu.Add(item);
+            _refreshers.Add(() =>
+                item.Value = Math.Max(0, Math.Min(steps, (_config.GetInt(path, fallback) - min) / step)));
+        }
+
+        /// <summary>
+        /// Called after a config or mode reload so the menu reflects what is on disk. Rebuilding
+        /// the menu objects would churn the LemonUI pool and drop the player out of whatever
+        /// submenu they were in, so instead the mode list is repopulated and every control
+        /// re-reads its own setting.
+        /// </summary>
+        public void Rebuild()
+        {
+            PopulateModes();
+
+            foreach (Action refresh in _refreshers)
+            {
+                try
+                {
+                    refresh();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Could not refresh a menu control", ex);
+                }
+            }
+
+            RefreshStopItem();
+        }
+
+        private void RefreshStopItem()
+        {
+            _stopItem.Enabled = _director.IsRunning;
+            _stopItem.Title = _director.IsRunning ? "Stop Riot" : "Stop Riot (nothing running)";
+        }
+    }
+}

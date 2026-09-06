@@ -1,0 +1,39 @@
+name: build
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # The mod targets .NET Framework 4.8 because SHVDN does. Reference assemblies let that
+      # build on Linux without Mono, so no Windows runner is needed.
+      - name: Test config layer
+        run: dotnet run --project tests/ConfigTests/ConfigTests.csproj -c Release
+
+      - name: Build mod
+        run: dotnet build src/TonightsTheNight/TonightsTheNight.csproj -c Release
+
+      - name: Stage release layout
+        run: |
+          mkdir -p out/scripts
+          cp src/TonightsTheNight/bin/Release/TonightsTheNight.dll out/scripts/
+          cp INSTALL.md out/
+          echo "Built from ${GITHUB_SHA} on $(date -u +%Y-%m-%dT%H:%M:%SZ)" > out/BUILD.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TonightsTheNight-${{ github.sha }}
+          path: out/
+          if-no-files-found: error
