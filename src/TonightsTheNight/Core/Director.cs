@@ -33,6 +33,9 @@ namespace TonightsTheNight.Core
         private int _nextWorkAt;        // game time of the next heavy pass
         private Ped _lastFighter;       // a nearby threat for fleeing peds to run from
 
+        /// <summary>Factions repeated by share, so round-robin over it honours the weights.</summary>
+        private readonly List<Faction> _recruitPool = new List<Faction>();
+
         public RiotMode ActiveMode { get; private set; }
         public bool IsRunning { get { return ActiveMode != null; } }
 
@@ -56,7 +59,8 @@ namespace TonightsTheNight.Core
 
         public void Start(RiotMode mode)
         {
-            if (IsRunning) { Stop(); }
+            // Quiet, or switching modes announces a stop the player did not ask for.
+            if (IsRunning) { Stop(true); }
 
             Log.Info("Starting mode '" + mode.Id + "' (" + mode.Name + ") with " + mode.Factions.Count + " faction(s).");
 
@@ -71,6 +75,7 @@ namespace TonightsTheNight.Core
 
             ApplyRelations(mode);
             ApplyPlayerSide(mode);
+            BuildRecruitPool(mode);
 
             _playerOriginalGroup = Function.Call<int>(Hash.GET_PED_RELATIONSHIP_GROUP_HASH, Game.Player.Character);
 
@@ -84,7 +89,9 @@ namespace TonightsTheNight.Core
             GTA.UI.Notification.Show("~r~Tonight's The Night~s~: " + mode.Name);
         }
 
-        public void Stop()
+        public void Stop() { Stop(false); }
+
+        public void Stop(bool quiet)
         {
             if (!IsRunning) { return; }
 
@@ -102,8 +109,9 @@ namespace TonightsTheNight.Core
             _relationships.Clear();
             _config.ClearModeOverrides();
             ActiveMode = null;
+            _lastFighter = null;
 
-            GTA.UI.Notification.Show("~g~Tonight's The Night~s~: stopped");
+            if (!quiet) { GTA.UI.Notification.Show("~g~Tonight's The Night~s~: stopped"); }
         }
 
         /// <summary>Called from the script's Aborted handler. Must not throw.</summary>
@@ -196,15 +204,7 @@ namespace TonightsTheNight.Core
             if (!_config.GetBool("riot.convertAmbientPeds", true)) { return; }
             if (_registry.Count >= _config.GetInt("engine.maxTrackedPeds", 120)) { return; }
 
-            var eligible = new List<Faction>();
-            foreach (Faction faction in ActiveMode.Factions)
-            {
-                if (!string.Equals(faction.Recruits, "none", StringComparison.OrdinalIgnoreCase))
-                {
-                    eligible.Add(faction);
-                }
-            }
-            if (eligible.Count == 0) { return; }
+            if (_recruitPool.Count == 0) { return; }
 
             Ped player = Game.Player.Character;
             float radius = _config.GetFloat("riot.recruitRadius", 180f);
@@ -219,9 +219,18 @@ namespace TonightsTheNight.Core
                 if (!IsRecruitable(ped, player)) { continue; }
                 if (_random.NextDouble() > chance) { continue; }
 
-                // Round-robin rather than random keeps faction sizes even, which matters when
-                // one side being outnumbered three to one just looks like a bug.
-                Faction faction = eligible[_recruitRotation++ % eligible.Count];
+                // People sharing a car are travelling together; putting them on opposing sides
+                // means they immediately shoot each other, which reads as a bug rather than as
+                // a riot. Vehicle mates inherit the faction of whoever was recruited first.
+                Faction faction = FactionOfVehicleMates(ped);
+
+                if (faction == null)
+                {
+                    // Round-robin over the share-weighted pool: predictable proportions, and
+                    // no risk of one side being randomly outnumbered in a way that reads as a bug.
+                    faction = _recruitPool[_recruitRotation++ % _recruitPool.Count];
+                }
+
                 if (!string.Equals(faction.Recruits, "any", StringComparison.OrdinalIgnoreCase) && !MatchesFilter(ped, faction.Recruits))
                 {
                     continue;
@@ -242,6 +251,58 @@ namespace TonightsTheNight.Core
                 converted++;
                 RecruitedTotal++;
             }
+        }
+
+        /// <summary>
+        /// Expands each recruiting faction into slots proportional to its share, so a mode can
+        /// say "a few rioters, mostly onlookers" without any special-casing at recruit time.
+        /// </summary>
+        private void BuildRecruitPool(RiotMode mode)
+        {
+            _recruitPool.Clear();
+            _recruitRotation = 0;
+
+            foreach (Faction faction in mode.Factions)
+            {
+                if (string.Equals(faction.Recruits, "none", StringComparison.OrdinalIgnoreCase)) { continue; }
+
+                int slots = (int)Math.Round(faction.Share * 10f);
+                if (slots < 1) { slots = 1; }
+
+                for (int i = 0; i < slots; i++) { _recruitPool.Add(faction); }
+            }
+
+            // Interleave so consecutive recruits alternate rather than arriving in blocks.
+            for (int i = _recruitPool.Count - 1; i > 0; i--)
+            {
+                int j = _random.Next(i + 1);
+                Faction swap = _recruitPool[i];
+                _recruitPool[i] = _recruitPool[j];
+                _recruitPool[j] = swap;
+            }
+
+            Log.Info("Recruit pool: " + _recruitPool.Count + " slot(s) across " + mode.Factions.Count + " faction(s).");
+        }
+
+        /// <summary>
+        /// The faction of an already-recruited occupant of this ped's vehicle, or null when the
+        /// ped is on foot or nobody in the car has been recruited yet.
+        /// </summary>
+        private Faction FactionOfVehicleMates(Ped ped)
+        {
+            if (!_config.GetBool("riot.groupVehicleOccupants", true)) { return null; }
+
+            Vehicle vehicle = ped.CurrentVehicle;
+            if (vehicle == null || !vehicle.Exists()) { return null; }
+
+            foreach (Ped occupant in vehicle.Occupants)
+            {
+                if (occupant == null || occupant.Handle == ped.Handle) { continue; }
+
+                TrackedPed mate = _registry.Find(occupant);
+                if (mate != null) { return mate.Faction; }
+            }
+            return null;
         }
 
         private bool IsRecruitable(Ped ped, Ped player)
@@ -305,7 +366,7 @@ namespace TonightsTheNight.Core
             // Compared squared to keep a square root out of the per-ped path.
             float cull = _config.GetFloat("engine.cullDistance", 450f);
             float cullSquared = cull * cull;
-            int retaskAfterMs = 4000;
+            int retaskAfterMs = _config.GetInt("combat.retaskIntervalMs", 6000);
             int examined = 0;
 
             while (examined < _budget && tracked.Count > 0)
@@ -315,7 +376,7 @@ namespace TonightsTheNight.Core
                 TrackedPed entry = tracked[_cursor];
                 examined++;
 
-                if (!entry.IsUsable)
+                if (!entry.IsUsable || !EntityRegistry.IsSameEntity(entry))
                 {
                     _registry.Remove(entry, false);
                     continue;
@@ -330,17 +391,35 @@ namespace TonightsTheNight.Core
                     continue;
                 }
 
-                if (entry.Reaction == Reaction.Fight &&
-                    !entry.Ped.IsInCombat &&
-                    Game.GameTime - entry.LastTaskedAt > retaskAfterMs)
+                if (ShouldRetask(entry, retaskAfterMs))
                 {
                     _conditioner.IssueTask(entry.Ped, entry.Faction, entry.Reaction, _lastFighter);
-                    entry.LastTaskedAt = Game.GameTime;
+                    // Jittered so a crowd does not retask in lockstep every few seconds.
+                    entry.LastTaskedAt = Game.GameTime + _random.Next(0, 1500);
                 }
 
                 UpdateBlip(entry, rangeSquared);
                 _cursor++;
             }
+        }
+
+        /// <summary>
+        /// Re-issuing a fight task over the top of a ped that is already reacting to something
+        /// is what produced the stutter loop: the game starts a flee, we interrupt it with a
+        /// fight, the game starts another flee. Leave a ped alone while it is visibly busy.
+        /// </summary>
+        private bool ShouldRetask(TrackedPed entry, int retaskAfterMs)
+        {
+            if (entry.Reaction != Reaction.Fight) { return false; }
+            if (Game.GameTime - entry.LastTaskedAt < retaskAfterMs) { return false; }
+
+            Ped ped = entry.Ped;
+            if (ped.IsInCombat || ped.IsFleeing || ped.IsRagdoll) { return false; }
+
+            // Being aimed at is its own reaction; interrupting it causes the stutter.
+            if (Function.Call<bool>(Hash.IS_PLAYER_FREE_AIMING_AT_ENTITY, Game.Player, ped)) { return false; }
+
+            return true;
         }
 
         private void AttachBlip(TrackedPed entry)

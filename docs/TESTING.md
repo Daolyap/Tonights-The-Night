@@ -37,10 +37,12 @@ result.
 1. Put `TonightsTheNight.dll` in `scripts/`, confirm `LemonUI.SHVDN3.dll` is there too.
 2. Load story mode.
 
-**Expect:** a notification, *"Tonight's The Night v0.1.0 loaded. Press F6"*.
+**Expect:** a notification, *"Tonight's The Night vX.Y.Z loaded. Press F6"*. It waits for you to
+have control of your character, so it arrives after the loading screen, not during it.
 
-**Also check:** `scripts/TonightsTheNight.log` exists and opens with a version banner, the game
-directory, and `Loaded 1 mode(s): Pedestrian Riot`.
+**Also check:** `scripts/TonightsTheNight.log` exists and opens with a version banner, the
+resolved paths, and `Loaded 1 mode(s): Pedestrian Riot`. The banner prints its own log path — if
+anything is ever in the wrong place, that line says where it actually went.
 
 > If there's no notification and no log, the script didn't load at all — that's a SHVDN problem,
 > and the SHVDN log (`ScriptHookVDotNet.log`) will say more than mine will.
@@ -50,6 +52,9 @@ directory, and `Loaded 1 mode(s): Pedestrian Riot`.
 Check `scripts/TonightsTheNight/` now contains `defaults.json`, `modes/pedestrians.json`, and
 empty `profiles/`. There should be **no** `user.json` — that's yours to create.
 
+Specifically **not** `scripts/scripts/TonightsTheNight/`. If you still have that folder from
+v0.1.0, delete it.
+
 Open `defaults.json`. It should be readable, commented, and complete.
 
 ## T3 — The menu
@@ -58,6 +63,9 @@ Press **F6**.
 
 **Expect:** a LemonUI menu titled *Tonight's The Night / RIOT CONTROL*, with `Riot Modes`,
 `Tuning`, `Features`, `Stop Riot` (greyed out, labelled *nothing running*) and `Reload Config`.
+
+> In v0.1.0 these read "START A MODE", "LIVE SETTINGS" and "OPTIONAL EXTRAS" — LemonUI names a
+> submenu's parent item from its subtitle rather than its title. Fixed in v0.1.1.
 
 Walk into each submenu. Sliders and toggles should move.
 

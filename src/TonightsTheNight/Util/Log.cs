@@ -39,6 +39,9 @@ namespace TonightsTheNight.Util
                 _failed = false;
                 try
                 {
+                    string dir = System.IO.Path.GetDirectoryName(Path);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) { Directory.CreateDirectory(dir); }
+
                     File.WriteAllText(Path, string.Empty, Encoding.UTF8);
                 }
                 catch (Exception)
@@ -50,8 +53,9 @@ namespace TonightsTheNight.Util
 
             Info("=== Tonight's The Night " + version + " ===");
             Info("Session started " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-            Info("Game directory: " + Paths.GameDir);
+            Info("Scripts directory: " + Paths.ScriptsDir);
             Info("Config directory: " + Paths.ConfigDir);
+            Info("Log file: " + Path);
         }
 
         public static void Debug(string message) { Write(LogLevel.Debug, message); }
@@ -99,21 +103,55 @@ namespace TonightsTheNight.Util
 
     public static class Paths
     {
-        private static string _gameDir;
+        private static string _scriptsDir;
 
-        public static string GameDir
+        /// <summary>
+        /// The folder the mod DLL lives in, which is the game's scripts folder.
+        ///
+        /// Do not assume AppDomain.BaseDirectory is the game root: under SHVDN it is the
+        /// scripts folder itself, so appending "scripts" to it produces scripts/scripts. The
+        /// assembly's own location is the reliable answer; the rest is fallback for hosts that
+        /// load the assembly from memory and leave Location empty.
+        /// </summary>
+        public static string ScriptsDir
         {
             get
             {
-                if (_gameDir == null)
+                if (_scriptsDir != null) { return _scriptsDir; }
+
+                try
                 {
-                    _gameDir = AppDomain.CurrentDomain.BaseDirectory ?? Directory.GetCurrentDirectory();
+                    string location = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                    if (!string.IsNullOrEmpty(location))
+                    {
+                        _scriptsDir = System.IO.Path.GetDirectoryName(location);
+                        if (!string.IsNullOrEmpty(_scriptsDir)) { return _scriptsDir; }
+                    }
                 }
-                return _gameDir;
+                catch (Exception)
+                {
+                    // Fall through to the directory-shape guess below.
+                }
+
+                string base_ = (AppDomain.CurrentDomain.BaseDirectory ?? Directory.GetCurrentDirectory())
+                    .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+
+                if (string.Equals(new DirectoryInfo(base_).Name, "scripts", StringComparison.OrdinalIgnoreCase))
+                {
+                    _scriptsDir = base_;
+                }
+                else if (Directory.Exists(System.IO.Path.Combine(base_, "scripts")))
+                {
+                    _scriptsDir = System.IO.Path.Combine(base_, "scripts");
+                }
+                else
+                {
+                    _scriptsDir = base_;
+                }
+
+                return _scriptsDir;
             }
         }
-
-        public static string ScriptsDir { get { return System.IO.Path.Combine(GameDir, "scripts"); } }
 
         /// <summary>scripts/TonightsTheNight/ — all config lives here.</summary>
         public static string ConfigDir { get { return System.IO.Path.Combine(ScriptsDir, "TonightsTheNight"); } }

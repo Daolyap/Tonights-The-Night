@@ -17,6 +17,15 @@ namespace TonightsTheNight.Core
         /// <summary>The relationship group the ped had before we touched it.</summary>
         public int OriginalGroup;
 
+        /// <summary>
+        /// The model this ped had when we recruited it.
+        ///
+        /// Entity handles are recycled: once a rioter dies and despawns, its handle can be
+        /// handed to something else entirely — which is how a seagull ends up wearing a red
+        /// riot blip. Comparing the model catches that.
+        /// </summary>
+        public int OriginalModel;
+
         /// <summary>True when we created this ped, as opposed to converting an ambient one.</summary>
         public bool Spawned;
 

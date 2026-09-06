@@ -95,6 +95,11 @@ namespace TonightsTheNight.Core
         private void Greet()
         {
             if (_greeted) { return; }
+
+            // Firing during the loading screen means the notification is never seen, which
+            // looks exactly like the mod failing to load.
+            if (Game.IsLoading || !Game.Player.CanControlCharacter) { return; }
+
             _greeted = true;
 
             GTA.UI.Notification.Show("~g~Tonight's The Night~s~ v" + DefaultConfig.Version + " loaded. Press ~b~" + _menuKey + "~s~.");
@@ -171,7 +176,17 @@ namespace TonightsTheNight.Core
                 }
 
                 Log.Info("Reloaded config and modes.");
-                GTA.UI.Notification.Show("~g~Reloaded~s~ config and " + _modes.Modes.Count + " mode(s).");
+
+                if (_config.LoadError != null)
+                {
+                    // Surfacing this only at startup meant a config broken mid-session failed
+                    // silently, which is the worst possible time for it to be quiet.
+                    GTA.UI.Notification.Show("~o~Config problem:~s~ " + _config.LoadError);
+                }
+                else
+                {
+                    GTA.UI.Notification.Show("~g~Reloaded~s~ config and " + _modes.Modes.Count + " mode(s).");
+                }
             }
             catch (Exception ex)
             {

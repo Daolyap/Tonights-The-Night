@@ -74,7 +74,10 @@ namespace TonightsTheNight.Core
             Function.Call(Hash.SET_PED_ACCURACY, ped, _config.GetInt("combat.accuracy", 20));
             Function.Call(Hash.SET_PED_SEEING_RANGE, ped, _config.GetFloat("combat.seeingRange", 60f));
             Function.Call(Hash.SET_PED_HEARING_RANGE, ped, _config.GetFloat("combat.hearingRange", 60f));
-            Function.Call(Hash.SET_PED_AS_ENEMY, ped, true);
+
+            // Deliberately NOT SET_PED_AS_ENEMY. That native makes a ped hostile to the player
+            // specifically, which overrode the relationship matrix and had rioters shooting a
+            // player the mode declared neutral. Who hates whom is the matrix's job alone.
         }
 
         private void ApplyDurability(Ped ped, Faction faction)

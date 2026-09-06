@@ -78,7 +78,15 @@ class Program
         Check("fightBackChance", Math.Abs(v["factions"]["bystanders"]["fightBackChance"].AsDouble() - 0.15) < 1e-9);
         Check("3 relations", v["relations"].Count == 3);
         Check("relation mutual flag", v["relations"].Items[0]["mutual"].AsBool() == true);
-        Check("mode config override", Math.Abs(Walk(v, "config.riot.conversionChance").AsDouble() - 0.9) < 1e-9);
+        Check("mode config override", Math.Abs(Walk(v, "config.combat.accuracy").AsDouble() - 15) < 1e-9);
+        Check("mob shares present", Math.Abs(v["factions"]["mob_red"]["share"].AsDouble() - 0.2) < 1e-9);
+        Check("bystanders outnumber the mobs",
+              v["factions"]["bystanders"]["share"].AsDouble() >
+              v["factions"]["mob_red"]["share"].AsDouble() + v["factions"]["mob_blue"]["share"].AsDouble());
+        Check("shares sum to 1", Math.Abs(
+              v["factions"]["mob_red"]["share"].AsDouble() +
+              v["factions"]["mob_blue"]["share"].AsDouble() +
+              v["factions"]["bystanders"]["share"].AsDouble() - 1.0) < 1e-9);
         Check("stock marker present", mode.Contains("\"_stock\": true"));
 
         Console.WriteLine("--- round trip ---");

@@ -43,8 +43,12 @@ namespace TonightsTheNight.Config
 
             JsonValue riot = JsonValue.NewObject();
             riot.Set("convertAmbientPeds", JsonValue.Of(true));
-            riot.Set("conversionChance", JsonValue.Of(0.85));
+            // Most people should not be in a faction. A crowd where everyone is fighting reads
+            // as "everyone simultaneously decided to brawl"; a minority fighting while the rest
+            // react reads as a riot.
+            riot.Set("conversionChance", JsonValue.Of(0.35));
             riot.Set("recruitRadius", JsonValue.Of(180));
+            riot.Set("groupVehicleOccupants", JsonValue.Of(true));
             riot.Set("restoreWorldOnStop", JsonValue.Of(true));
             root.Set("riot", riot);
 
@@ -66,6 +70,7 @@ namespace TonightsTheNight.Config
             combat.Set("combatAbility", JsonValue.Of(1));    // 0 poor, 1 average, 2 professional
             combat.Set("seeingRange", JsonValue.Of(60));
             combat.Set("hearingRange", JsonValue.Of(60));
+            combat.Set("retaskIntervalMs", JsonValue.Of(6000));
 
             // SET_PED_COMBAT_ATTRIBUTES IDs. These are community-documented rather than
             // official and are the most likely thing here to be quietly wrong, so they are

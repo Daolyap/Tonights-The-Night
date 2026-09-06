@@ -79,10 +79,23 @@ namespace TonightsTheNight.Menu
 
         private void BuildModeMenu()
         {
-            _modeMenu = new NativeMenu("Riot Modes", "START A MODE");
+            _modeMenu = new NativeMenu("Tonight's The Night", "RIOT MODES");
             _pool.Add(_modeMenu);
-            _root.AddSubMenu(_modeMenu);
+            AddSubMenu(_modeMenu, "Riot Modes", "Pick a mode and start it.");
             PopulateModes();
+        }
+
+        /// <summary>
+        /// LemonUI names the parent item from the submenu's *subtitle*, not its title, so a
+        /// submenu added bare shows up as a shouty banner string in the parent list. Name the
+        /// returned item explicitly instead.
+        /// </summary>
+        private NativeSubmenuItem AddSubMenu(NativeMenu submenu, string title, string description)
+        {
+            NativeSubmenuItem item = _root.AddSubMenu(submenu);
+            item.Title = title;
+            item.Description = description;
+            return item;
         }
 
         private void PopulateModes()
@@ -119,9 +132,9 @@ namespace TonightsTheNight.Menu
 
         private void BuildTuningMenu()
         {
-            _tuningMenu = new NativeMenu("Tuning", "LIVE SETTINGS");
+            _tuningMenu = new NativeMenu("Tonight's The Night", "TUNING");
             _pool.Add(_tuningMenu);
-            _root.AddSubMenu(_tuningMenu);
+            AddSubMenu(_tuningMenu, "Tuning", "Live settings: how many peds, how hard they fight, blips.");
 
             AddPercentSlider(_tuningMenu, "Conversion Chance", "riot.conversionChance", 0.85f,
                 "How likely a nearby pedestrian is to be pulled into a faction.");
@@ -147,9 +160,9 @@ namespace TonightsTheNight.Menu
 
         private void BuildFeaturesMenu()
         {
-            _featuresMenu = new NativeMenu("Features", "OPTIONAL EXTRAS");
+            _featuresMenu = new NativeMenu("Tonight's The Night", "FEATURES");
             _pool.Add(_featuresMenu);
-            _root.AddSubMenu(_featuresMenu);
+            AddSubMenu(_featuresMenu, "Features", "Optional extras and mod-compatibility switches.");
 
             AddToggle(_featuresMenu, "Debug Overlay", "features.debugOverlay.enabled", false,
                 "On-screen counters. Logging happens either way.");

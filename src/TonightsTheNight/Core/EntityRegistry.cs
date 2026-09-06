@@ -18,14 +18,30 @@ namespace TonightsTheNight.Core
     public sealed class EntityRegistry
     {
         private readonly List<TrackedPed> _tracked = new List<TrackedPed>();
-        private readonly HashSet<int> _handles = new HashSet<int>();
+        private readonly Dictionary<int, TrackedPed> _byHandle = new Dictionary<int, TrackedPed>();
 
         public int Count { get { return _tracked.Count; } }
         public IReadOnlyList<TrackedPed> Tracked { get { return _tracked; } }
 
         public bool Contains(Ped ped)
         {
-            return ped != null && _handles.Contains(ped.Handle);
+            return ped != null && _byHandle.ContainsKey(ped.Handle);
+        }
+
+        public TrackedPed Find(Ped ped)
+        {
+            TrackedPed entry;
+            return ped != null && _byHandle.TryGetValue(ped.Handle, out entry) ? entry : null;
+        }
+
+        /// <summary>
+        /// False once the handle has been recycled onto a different entity. Cheap, and the only
+        /// thing standing between us and blips on wildlife.
+        /// </summary>
+        public static bool IsSameEntity(TrackedPed entry)
+        {
+            if (entry.Ped == null || !entry.Ped.Exists()) { return false; }
+            return entry.OriginalModel == 0 || entry.Ped.Model.Hash == entry.OriginalModel;
         }
 
         public TrackedPed Add(Ped ped, Faction faction, Reaction reaction, bool spawned)
@@ -37,33 +53,41 @@ namespace TonightsTheNight.Core
                 Reaction = reaction,
                 Spawned = spawned,
                 OriginalGroup = Function.Call<int>(Hash.GET_PED_RELATIONSHIP_GROUP_HASH, ped),
+                OriginalModel = ped.Model.Hash,
                 LastTaskedAt = 0
             };
 
             _tracked.Add(entry);
-            _handles.Add(ped.Handle);
+            _byHandle[ped.Handle] = entry;
             return entry;
         }
 
         public void Remove(TrackedPed entry, bool restore)
         {
+            // The blip goes in every path. Deleting it only on the restore path is why blips
+            // outlived the peds they were attached to.
+            DeleteBlip(entry);
+
             if (restore) { Restore(entry); }
 
             _tracked.Remove(entry);
-            if (entry.Ped != null) { _handles.Remove(entry.Ped.Handle); }
+            if (entry.Ped != null) { _byHandle.Remove(entry.Ped.Handle); }
         }
 
-        /// <summary>Drops entries whose peds are gone, without touching the survivors.</summary>
+        /// <summary>
+        /// Drops entries whose peds are gone or whose handle now belongs to something else,
+        /// without touching the survivors.
+        /// </summary>
         public int PruneDead()
         {
             int removed = 0;
             for (int i = _tracked.Count - 1; i >= 0; i--)
             {
                 TrackedPed entry = _tracked[i];
-                if (entry.Ped != null && entry.Ped.Exists()) { continue; }
+                if (IsSameEntity(entry)) { continue; }
 
                 DeleteBlip(entry);
-                _handles.Remove(entry.Ped != null ? entry.Ped.Handle : 0);
+                if (entry.Ped != null) { _byHandle.Remove(entry.Ped.Handle); }
                 _tracked.RemoveAt(i);
                 removed++;
             }
@@ -80,7 +104,7 @@ namespace TonightsTheNight.Core
             }
 
             _tracked.Clear();
-            _handles.Clear();
+            _byHandle.Clear();
         }
 
         private static void Restore(TrackedPed entry)
@@ -104,11 +128,14 @@ namespace TonightsTheNight.Core
                 Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ped, entry.OriginalGroup);
                 Function.Call(Hash.SET_PED_AS_ENEMY, ped, false);
 
-                // Undo the "never run away" conditioning.
+                // Undo the conditioning before clearing tasks, or the ped re-enters combat off
+                // the back of attributes we left set.
                 Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, ped, 0, true);
                 Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.AlwaysFight, false);
+                Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.CanFightArmedPedsWhenNotArmed, false);
+                Function.Call(Hash.SET_PED_KEEP_TASK, ped, false);
 
-                ped.Task.ClearAllImmediately();
+                Function.Call(Hash.CLEAR_PED_TASKS_IMMEDIATELY, ped);
                 ped.MarkAsNoLongerNeeded();
             }
             catch (Exception ex)

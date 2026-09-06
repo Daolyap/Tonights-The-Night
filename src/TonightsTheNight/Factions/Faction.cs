@@ -34,6 +34,13 @@ namespace TonightsTheNight.Factions
         /// <summary>Only meaningful for <see cref="Reaction.Mixed"/>. 0..1.</summary>
         public float FightBackChance { get; private set; }
 
+        /// <summary>
+        /// Relative size of this faction among the recruits a mode makes. Shares are relative,
+        /// not percentages: two factions at 1 each split evenly, and 0.2/0.2/0.6 makes the third
+        /// three times either of the others.
+        /// </summary>
+        public float Share { get; private set; }
+
         /// <summary>Weapon names, resolved lazily so an unknown name is a log line, not a crash.</summary>
         public List<string> Weapons { get; private set; }
 
@@ -66,6 +73,7 @@ namespace TonightsTheNight.Factions
                 Id = id,
                 DisplayName = node["name"].AsString(id),
                 FightBackChance = Clamp01(node["fightBackChance"].AsFloat(0.25f)),
+                Share = Math.Max(0f, node["share"].AsFloat(1f)),
                 Weapons = node["weapons"].AsStringList(),
                 Ammo = node["ammo"].AsInt(120),
                 Armour = Math.Max(0, Math.Min(100, node["armour"].AsInt(0))),

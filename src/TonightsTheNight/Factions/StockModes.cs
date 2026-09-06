@@ -41,6 +41,7 @@ namespace TonightsTheNight.Factions
       ""name"": ""Red Mob"",
       ""reaction"": ""Fight"",
       ""recruits"": ""civilian"",     // pulled from ambient peds rather than spawned
+      ""share"": 0.2,               // relative size among recruits - see bystanders below
       ""armedChance"": 0.8,
       ""ammo"": 150,
       ""armour"": 0,
@@ -52,6 +53,7 @@ namespace TonightsTheNight.Factions
       ""name"": ""Blue Mob"",
       ""reaction"": ""Fight"",
       ""recruits"": ""civilian"",
+      ""share"": 0.2,
       ""armedChance"": 0.8,
       ""ammo"": 150,
       ""armour"": 0,
@@ -65,6 +67,9 @@ namespace TonightsTheNight.Factions
       ""reaction"": ""Mixed"",
       ""fightBackChance"": 0.15,
       ""recruits"": ""civilian"",
+      // Three times the size of either mob. Combined with a 0.35 conversion chance, most
+      // people in the street are untouched, a minority panic, and a small core actually fights.
+      ""share"": 0.6,
       ""armedChance"": 0.1,
       ""ammo"": 40,
       ""weapons"": [ ""Bat"", ""Bottle"" ],
@@ -81,7 +86,6 @@ namespace TonightsTheNight.Factions
 
   // Layer 3 of the config stack: applies only while this mode is running.
   ""config"": {
-    ""riot"": { ""conversionChance"": 0.9 },
     ""combat"": { ""accuracy"": 15 }
   }
 }
