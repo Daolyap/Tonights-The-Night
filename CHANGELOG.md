@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.1.2 — path fix, crowd rebalance, you are a target
+
+### Fixed
+
+- **Config and log were written nowhere findable.** v0.1.0 put them in `scripts/scripts`;
+  v0.1.1's "fix" was worse, resolving from the assembly's own location — but SHVDN shadow-copies
+  script assemblies, so that points at a temp cache. `AppDomain.BaseDirectory` *is* the scripts
+  folder under SHVDN; it just must not have `scripts` appended to it. That is now the rule, with
+  the reasoning written into the code so a third wrong answer doesn't happen.
+- **This can no longer be invisible.** Startup shows the config path on screen, the log opens
+  with every path candidate and the one chosen, the config folder is probed for writability at
+  load, and a failure is now a red notification instead of silence. There is a **Show File
+  Locations** item in the menu.
+- **Peds still re-fought after a stop.** Clearing tasks once isn't enough — two peds who have
+  already wounded each other re-engage from vanilla AI memory the moment they're free. They're
+  now kept calm for a few seconds after a stop (`riot.pacifySeconds`).
+
+### Changed
+
+- **The crowd is rebalanced.** v0.1.1 overcorrected into a street where almost everyone ran away.
+  Conversion is back up to 0.55, and the mobs now take 45% each of recruits against 10%
+  bystanders. The reasoning changed too: most non-fighters should be **left alone entirely**
+  rather than converted into fleeing bystanders. An untouched ped reacts to gunfire by itself and
+  looks better doing it than one we explicitly told to run.
+- **You are a target by default.** Standing in the middle of a riot untouched reads as a bug, not
+  as neutrality — during a purge, being just another person on the street is the point. New
+  `player.stance` setting (`ignored` / `disliked` / `target`, default `target`) with a
+  **They Treat You As** picker in Tuning that applies live, mid-riot. Replaces
+  `player.everyoneHatesPlayer`.
+- Added `TonightsTheNight.sln` so the project opens and builds directly in Visual Studio.
+
 ## v0.1.1 — first test round fixes
 
 All from the first in-game test. The engine itself worked: peds recruited and fought within

@@ -28,12 +28,12 @@ namespace TonightsTheNight.Factions
   ""_stock"": true,
 
   ""name"": ""Pedestrian Riot"",
-  ""description"": ""Two mobs form out of the crowd and go at each other. Everyone else runs."",
+  ""description"": ""Two mobs form out of the crowd and go at each other. You are fair game."",
   ""enabled"": true,
 
   // How the world treats you when you have not picked a side.
   // neutral | dislike | hate
-  ""playerRelationship"": ""neutral"",
+  ""playerRelationship"": ""hate"",
 
   ""factions"": {
 
@@ -41,7 +41,7 @@ namespace TonightsTheNight.Factions
       ""name"": ""Red Mob"",
       ""reaction"": ""Fight"",
       ""recruits"": ""civilian"",     // pulled from ambient peds rather than spawned
-      ""share"": 0.2,               // relative size among recruits - see bystanders below
+      ""share"": 0.45,              // relative size among recruits
       ""armedChance"": 0.8,
       ""ammo"": 150,
       ""armour"": 0,
@@ -53,7 +53,7 @@ namespace TonightsTheNight.Factions
       ""name"": ""Blue Mob"",
       ""reaction"": ""Fight"",
       ""recruits"": ""civilian"",
-      ""share"": 0.2,
+      ""share"": 0.45,
       ""armedChance"": 0.8,
       ""ammo"": 150,
       ""armour"": 0,
@@ -67,9 +67,10 @@ namespace TonightsTheNight.Factions
       ""reaction"": ""Mixed"",
       ""fightBackChance"": 0.15,
       ""recruits"": ""civilian"",
-      // Three times the size of either mob. Combined with a 0.35 conversion chance, most
-      // people in the street are untouched, a minority panic, and a small core actually fights.
-      ""share"": 0.6,
+      // A small seasoning of panic. Most non-fighters are simply never recruited - an
+      // untouched ped reacts to gunfire on its own and looks better doing it than one we
+      // explicitly told to run.
+      ""share"": 0.1,
       ""armedChance"": 0.1,
       ""ammo"": 40,
       ""weapons"": [ ""Bat"", ""Bottle"" ],

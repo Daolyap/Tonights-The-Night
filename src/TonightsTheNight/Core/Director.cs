@@ -36,6 +36,10 @@ namespace TonightsTheNight.Core
         /// <summary>Factions repeated by share, so round-robin over it honours the weights.</summary>
         private readonly List<Faction> _recruitPool = new List<Faction>();
 
+        /// <summary>Peds being calmed down after a stop, and the deadline for doing so.</summary>
+        private readonly List<Ped> _pacifying = new List<Ped>();
+        private int _pacifyUntil;
+
         public RiotMode ActiveMode { get; private set; }
         public bool IsRunning { get { return ActiveMode != null; } }
 
@@ -100,6 +104,7 @@ namespace TonightsTheNight.Core
 
             if (_config.GetBool("riot.restoreWorldOnStop", true))
             {
+                BeginPacifying(_registry.Tracked);
                 _registry.RestoreAll();
             }
 
@@ -133,6 +138,10 @@ namespace TonightsTheNight.Core
 
         public void Tick()
         {
+            // Runs even when stopped: peds who were mid-fight need a few seconds of calming
+            // before they truly settle.
+            Pacify();
+
             if (!IsRunning) { return; }
 
             _stopwatch.Restart();
@@ -422,6 +431,54 @@ namespace TonightsTheNight.Core
             return true;
         }
 
+        /// <summary>
+        /// Clearing tasks once is not enough: two peds who have already wounded each other will
+        /// re-engage from vanilla AI memory the moment they are free. Keep clearing for a few
+        /// seconds so the crowd actually settles instead of flaring back up.
+        /// </summary>
+        private void BeginPacifying(IReadOnlyList<TrackedPed> entries)
+        {
+            _pacifying.Clear();
+            foreach (TrackedPed entry in entries)
+            {
+                if (entry.IsUsable) { _pacifying.Add(entry.Ped); }
+            }
+
+            int seconds = _config.GetInt("riot.pacifySeconds", 5);
+            _pacifyUntil = Game.GameTime + seconds * 1000;
+
+            if (_pacifying.Count > 0)
+            {
+                Log.Info("Calming " + _pacifying.Count + " ped(s) for " + seconds + "s.");
+            }
+        }
+
+        private void Pacify()
+        {
+            if (_pacifying.Count == 0) { return; }
+
+            if (Game.GameTime > _pacifyUntil)
+            {
+                _pacifying.Clear();
+                return;
+            }
+
+            foreach (Ped ped in _pacifying)
+            {
+                try
+                {
+                    if (ped == null || !ped.Exists() || ped.IsDead) { continue; }
+                    if (!ped.IsInCombat) { continue; }
+
+                    Function.Call(Hash.CLEAR_PED_TASKS_IMMEDIATELY, ped);
+                }
+                catch (Exception)
+                {
+                    // A ped that vanished mid-pass is not worth a log line every frame.
+                }
+            }
+        }
+
         private void AttachBlip(TrackedPed entry)
         {
             if (!_config.GetBool("blips.enabled", true)) { return; }
@@ -496,10 +553,18 @@ namespace TonightsTheNight.Core
         /// The player is just another relationship group, which is what makes "walk through it
         /// as press" and "join a side" the same mechanism rather than two features.
         /// </summary>
+        /// <summary>
+        /// Re-applies the player's standing. Safe to call mid-riot, so the stance can be changed
+        /// from the menu without restarting the mode.
+        /// </summary>
+        public void RefreshPlayerStance()
+        {
+            if (IsRunning) { ApplyPlayerSide(ActiveMode); }
+        }
+
         private void ApplyPlayerSide(RiotMode mode)
         {
             string side = _config.GetString("player.side", "neutral");
-            bool everyoneHostile = _config.GetBool("player.everyoneHatesPlayer", false);
 
             Faction joined = string.Equals(side, "neutral", StringComparison.OrdinalIgnoreCase) ? null : mode.Find(side);
             int playerGroup = joined != null ? joined.GroupHash : _relationships.PlayerGroup;
@@ -512,14 +577,33 @@ namespace TonightsTheNight.Core
                 return;
             }
 
-            int stance = everyoneHostile ? RelationshipMatrix.Hate : mode.PlayerRelationship;
+            int stance = ParseStance(_config.GetString("player.stance", "target"), mode.PlayerRelationship);
             foreach (Faction faction in mode.Factions)
             {
                 _relationships.Set(faction.GroupHash, _relationships.PlayerGroup, stance);
                 _relationships.Set(_relationships.PlayerGroup, faction.GroupHash, RelationshipMatrix.Neutral);
             }
 
-            Log.Info("Player is neutral (factions treat them as " + stance + ").");
+            Log.Info("Player stance: " + stance + " (0 companion .. 5 hate).");
+        }
+
+        /// <summary>
+        /// How the factions regard the player. "target" is the default because during a riot -
+        /// a purge especially - being just another person on the street is the point; standing
+        /// in the middle of it untouched reads as a bug, not as neutrality.
+        /// </summary>
+        private static int ParseStance(string text, int modeDefault)
+        {
+            switch ((text ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "ignored": return RelationshipMatrix.Neutral;
+                case "disliked": return RelationshipMatrix.Dislike;
+                case "target": return RelationshipMatrix.Hate;
+                case "mode": return modeDefault;
+                default:
+                    Log.Warn("Unknown player stance '" + text + "', using the mode's own setting.");
+                    return modeDefault;
+            }
         }
 
         /// <summary>

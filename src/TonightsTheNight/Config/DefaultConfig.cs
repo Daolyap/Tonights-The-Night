@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.1.1";
+        public const string Version = "0.1.2";
 
         public static JsonValue Build()
         {
@@ -43,13 +43,17 @@ namespace TonightsTheNight.Config
 
             JsonValue riot = JsonValue.NewObject();
             riot.Set("convertAmbientPeds", JsonValue.Of(true));
-            // Most people should not be in a faction. A crowd where everyone is fighting reads
-            // as "everyone simultaneously decided to brawl"; a minority fighting while the rest
-            // react reads as a riot.
-            riot.Set("conversionChance", JsonValue.Of(0.35));
+            // Roughly half the nearby crowd joins a faction. The other half is left completely
+            // alone rather than converted into fleeing bystanders: an untouched ped walking
+            // normally reads far better than a converted one running, and a street where
+            // everyone flees looks as wrong as one where everyone fights.
+            riot.Set("conversionChance", JsonValue.Of(0.55));
             riot.Set("recruitRadius", JsonValue.Of(180));
             riot.Set("groupVehicleOccupants", JsonValue.Of(true));
             riot.Set("restoreWorldOnStop", JsonValue.Of(true));
+            // Peds who wounded each other re-engage from vanilla AI memory after one task
+            // clear, so keep calming them for a few seconds after a stop.
+            riot.Set("pacifySeconds", JsonValue.Of(5));
             root.Set("riot", riot);
 
             // Ped density is a per-frame native, so these are applied every tick while active.
@@ -97,7 +101,9 @@ namespace TonightsTheNight.Config
 
             JsonValue player = JsonValue.NewObject();
             player.Set("side", JsonValue.Of("neutral"));       // neutral | <faction id>
-            player.Set("everyoneHatesPlayer", JsonValue.Of(false));
+            // ignored | disliked | target | mode. Default target: during a riot, being just
+            // another person on the street is the point. Set "ignored" to watch undisturbed.
+            player.Set("stance", JsonValue.Of("target"));
             root.Set("player", player);
 
             // Compatibility with other mods. These default to the conservative choice: this

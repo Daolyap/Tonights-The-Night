@@ -73,6 +73,23 @@ namespace TonightsTheNight.Menu
             reload.Activated += (sender, args) => _reloadRequested();
             _root.Add(reload);
 
+            // Where the files went should never again be something you can only find by
+            // searching the disk.
+            var paths = new NativeItem("Show File Locations", "Print the config and log paths on screen and to the log.");
+            paths.Activated += (sender, args) =>
+            {
+                Log.Info("Path resolution (requested from menu):");
+                foreach (string line in Paths.Diagnostics().Split('\n'))
+                {
+                    Log.Info("  " + line.TrimEnd('\r'));
+                }
+
+                GTA.UI.Notification.Show("~b~Config:~s~ " + Paths.ConfigDir);
+                GTA.UI.Screen.ShowSubtitle(Paths.Diagnostics().Replace(Environment.NewLine, "~n~"), 12000);
+                _root.Visible = false;
+            };
+            _root.Add(paths);
+
             _root.Shown += (sender, args) => RefreshStopItem();
             RefreshStopItem();
         }
@@ -154,6 +171,8 @@ namespace TonightsTheNight.Menu
             AddToggle(_tuningMenu, "Blips", "blips.enabled", true,
                 "Faction blips on the minimap. Capped and distance-limited, but still not free.");
 
+            AddStancePicker(_tuningMenu);
+
             AddToggle(_tuningMenu, "Never Flee", "combat.neverFlee", true,
                 "Stops fighters breaking off and running. Turn off for a more realistic crowd.");
         }
@@ -178,6 +197,31 @@ namespace TonightsTheNight.Menu
 
             AddToggle(_featuresMenu, "Protect Mission Peds", "compatibility.protectMissionPeds", true,
                 "Never recruit story peds. Turning this off can break missions.");
+        }
+
+        /// <summary>
+        /// How the rioters regard the player. Applied live, so it can be flipped mid-riot
+        /// without restarting the mode.
+        /// </summary>
+        private void AddStancePicker(NativeMenu menu)
+        {
+            string[] labels = { "Ignored", "Disliked", "Target" };
+            string[] values = { "ignored", "disliked", "target" };
+
+            var item = new NativeListItem<string>("They Treat You As",
+                "Ignored: walk through it untouched. Disliked: they react if you get close. Target: fair game.",
+                labels);
+
+            item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("player.stance", "target")));
+            item.ItemChanged += (sender, args) =>
+            {
+                _config.SetLive("player.stance", JsonValue.Of(values[item.SelectedIndex]));
+                _director.RefreshPlayerStance();
+            };
+
+            menu.Add(item);
+            _refreshers.Add(() =>
+                item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("player.stance", "target"))));
         }
 
         private void AddToggle(NativeMenu menu, string title, string path, bool fallback, string description)

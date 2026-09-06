@@ -52,8 +52,12 @@ anything is ever in the wrong place, that line says where it actually went.
 Check `scripts/TonightsTheNight/` now contains `defaults.json`, `modes/pedestrians.json`, and
 empty `profiles/`. There should be **no** `user.json` — that's yours to create.
 
-Specifically **not** `scripts/scripts/TonightsTheNight/`. If you still have that folder from
-v0.1.0, delete it.
+Specifically **not** `scripts/scripts/TonightsTheNight/`, and not a temp folder. If you still
+have a stray `scripts/scripts/` from an older build, delete it.
+
+If anything is missing, open the menu and pick **Show File Locations** — it prints every path
+the mod considered and the one it chose, on screen and to the log. You should never have to
+search the disk for these.
 
 Open `defaults.json`. It should be readable, commented, and complete.
 

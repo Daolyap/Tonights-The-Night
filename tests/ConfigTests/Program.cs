@@ -79,10 +79,12 @@ class Program
         Check("3 relations", v["relations"].Count == 3);
         Check("relation mutual flag", v["relations"].Items[0]["mutual"].AsBool() == true);
         Check("mode config override", Math.Abs(Walk(v, "config.combat.accuracy").AsDouble() - 15) < 1e-9);
-        Check("mob shares present", Math.Abs(v["factions"]["mob_red"]["share"].AsDouble() - 0.2) < 1e-9);
-        Check("bystanders outnumber the mobs",
-              v["factions"]["bystanders"]["share"].AsDouble() >
-              v["factions"]["mob_red"]["share"].AsDouble() + v["factions"]["mob_blue"]["share"].AsDouble());
+        Check("mob shares present", Math.Abs(v["factions"]["mob_red"]["share"].AsDouble() - 0.45) < 1e-9);
+        Check("fighters outnumber explicit bystanders",
+              v["factions"]["mob_red"]["share"].AsDouble() + v["factions"]["mob_blue"]["share"].AsDouble() >
+              v["factions"]["bystanders"]["share"].AsDouble());
+        Check("player is fair game in the stock mode",
+              v["playerRelationship"].AsString() == "hate", v["playerRelationship"].AsString());
         Check("shares sum to 1", Math.Abs(
               v["factions"]["mob_red"]["share"].AsDouble() +
               v["factions"]["mob_blue"]["share"].AsDouble() +

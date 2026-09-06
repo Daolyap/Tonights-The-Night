@@ -216,7 +216,13 @@ namespace TonightsTheNight.Config
             }
         }
 
-        private static void EnsureDirectories()
+        /// <summary>
+        /// Creates the config folders and proves one is writable.
+        ///
+        /// Reported rather than swallowed: a mod that silently writes nowhere is indist-
+        /// inguishable from a mod that is broken, and that has now cost two test rounds.
+        /// </summary>
+        private void EnsureDirectories()
         {
             foreach (string dir in new[] { Paths.ConfigDir, Paths.ModesDir, Paths.ProfilesDir })
             {
@@ -227,7 +233,21 @@ namespace TonightsTheNight.Config
                 catch (Exception ex)
                 {
                     Log.Error("Could not create " + dir, ex);
+                    LoadError = "cannot create " + dir + " (" + ex.GetType().Name + ")";
+                    return;
                 }
+            }
+
+            try
+            {
+                string probe = Path.Combine(Paths.ConfigDir, ".writetest");
+                File.WriteAllText(probe, "ok");
+                File.Delete(probe);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Config folder is not writable: " + Paths.ConfigDir, ex);
+                LoadError = Paths.ConfigDir + " is not writable (" + ex.GetType().Name + ")";
             }
         }
 
@@ -235,7 +255,7 @@ namespace TonightsTheNight.Config
         /// defaults.json is ours to own, so it gets rewritten whenever the shipped version
         /// changes. user.json is never touched — that is the whole point of the split.
         /// </summary>
-        private static void EnsureDefaultsFile()
+        private void EnsureDefaultsFile()
         {
             try
             {

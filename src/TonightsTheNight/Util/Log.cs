@@ -53,9 +53,11 @@ namespace TonightsTheNight.Util
 
             Info("=== Tonight's The Night " + version + " ===");
             Info("Session started " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-            Info("Scripts directory: " + Paths.ScriptsDir);
-            Info("Config directory: " + Paths.ConfigDir);
-            Info("Log file: " + Path);
+            Info("Path resolution:");
+            foreach (string line in Paths.Diagnostics().Split('\n'))
+            {
+                Info("  " + line.TrimEnd('\r'));
+            }
         }
 
         public static void Debug(string message) { Write(LogLevel.Debug, message); }
@@ -113,44 +115,83 @@ namespace TonightsTheNight.Util
         /// assembly's own location is the reliable answer; the rest is fallback for hosts that
         /// load the assembly from memory and leave Location empty.
         /// </summary>
+        /// <summary>
+        /// The game's scripts folder.
+        ///
+        /// Two wrong answers have already shipped here, so the reasoning is written down.
+        ///
+        /// Under SHVDN, <c>AppDomain.BaseDirectory</c> IS the scripts folder — appending
+        /// "scripts" to it produced scripts/scripts (v0.1.0). The assembly's own Location is
+        /// worse: the script domain shadow-copies assemblies, so Location points at a temp
+        /// cache and config lands somewhere nobody will ever find it (v0.1.1).
+        ///
+        /// So: trust BaseDirectory, and only append "scripts" when it is clearly the game root
+        /// rather than the scripts folder. Every candidate is recorded in
+        /// <see cref="Diagnostics"/> and logged at startup, so a third wrong answer is at
+        /// least visible rather than silent.
+        /// </summary>
         public static string ScriptsDir
         {
             get
             {
                 if (_scriptsDir != null) { return _scriptsDir; }
 
-                try
-                {
-                    string location = System.Reflection.Assembly.GetExecutingAssembly().Location;
-                    if (!string.IsNullOrEmpty(location))
-                    {
-                        _scriptsDir = System.IO.Path.GetDirectoryName(location);
-                        if (!string.IsNullOrEmpty(_scriptsDir)) { return _scriptsDir; }
-                    }
-                }
-                catch (Exception)
-                {
-                    // Fall through to the directory-shape guess below.
-                }
-
-                string base_ = (AppDomain.CurrentDomain.BaseDirectory ?? Directory.GetCurrentDirectory())
+                string root = (AppDomain.CurrentDomain.BaseDirectory ?? Directory.GetCurrentDirectory())
                     .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
 
-                if (string.Equals(new DirectoryInfo(base_).Name, "scripts", StringComparison.OrdinalIgnoreCase))
+                if (IsScriptsFolder(root))
                 {
-                    _scriptsDir = base_;
+                    _scriptsDir = root;
                 }
-                else if (Directory.Exists(System.IO.Path.Combine(base_, "scripts")))
+                else if (Directory.Exists(System.IO.Path.Combine(root, "scripts")))
                 {
-                    _scriptsDir = System.IO.Path.Combine(base_, "scripts");
+                    _scriptsDir = System.IO.Path.Combine(root, "scripts");
                 }
                 else
                 {
-                    _scriptsDir = base_;
+                    _scriptsDir = root;
                 }
 
                 return _scriptsDir;
             }
+        }
+
+        private static bool IsScriptsFolder(string path)
+        {
+            try
+            {
+                return string.Equals(new DirectoryInfo(path).Name, "scripts", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Every path candidate and where we landed. Logged at startup and shown in the menu,
+        /// because a mod writing its files somewhere unexpected must never again be something
+        /// you can only discover by hunting the disk.
+        /// </summary>
+        public static string Diagnostics()
+        {
+            string assembly;
+            try
+            {
+                string location = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                assembly = string.IsNullOrEmpty(location) ? "(none - loaded from memory)" : location;
+            }
+            catch (Exception ex)
+            {
+                assembly = "(unavailable: " + ex.GetType().Name + ")";
+            }
+
+            return "AppDomain.BaseDirectory : " + (AppDomain.CurrentDomain.BaseDirectory ?? "(null)") + Environment.NewLine +
+                   "Assembly.Location       : " + assembly + Environment.NewLine +
+                   "Current directory       : " + Directory.GetCurrentDirectory() + Environment.NewLine +
+                   "-> scripts folder       : " + ScriptsDir + Environment.NewLine +
+                   "-> config folder        : " + ConfigDir + Environment.NewLine +
+                   "-> log file             : " + System.IO.Path.Combine(ScriptsDir, "TonightsTheNight.log");
         }
 
         /// <summary>scripts/TonightsTheNight/ — all config lives here.</summary>

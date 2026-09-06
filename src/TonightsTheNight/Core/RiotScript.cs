@@ -103,10 +103,11 @@ namespace TonightsTheNight.Core
             _greeted = true;
 
             GTA.UI.Notification.Show("~g~Tonight's The Night~s~ v" + DefaultConfig.Version + " loaded. Press ~b~" + _menuKey + "~s~.");
+            GTA.UI.Notification.Show("~b~Config:~s~ " + Paths.ConfigDir);
 
             if (_config.LoadError != null)
             {
-                GTA.UI.Notification.Show("~o~Config problem:~s~ " + _config.LoadError);
+                GTA.UI.Notification.Show("~r~Config problem:~s~ " + _config.LoadError);
             }
         }
 
