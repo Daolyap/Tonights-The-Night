@@ -63,7 +63,7 @@ police that behave like police, escalation). We're not pioneering, we're going d
 | Managed hook | **ScriptHookVDotNet Enhanced** (Chiheb-Bacha fork), v1.1.0.6 | Drop-in SHVDN replacement, one build for Legacy + Enhanced, defaults raw scripts to the v3 API |
 | Language | C# on **.NET Framework 4.8** | Fixed by SHVDN |
 | Menu | **LemonUI.SHVDN3** 2.2.0 | NativeUI is dead; LemonUI confirmed working under SHVDN Enhanced |
-| Config | JSON, hot-reloadable | Parser merged into our DLL (§5.6) |
+| Config | JSON, hot-reloadable | Parser merged into our DLL (§5.7) |
 | Output | single `TonightsTheNight.dll` + `TonightsTheNight/` config folder in `scripts/` | |
 
 **Compile target vs. runtime target.** We compile against the `ScriptHookVDotNet3` **3.6.0**
@@ -187,13 +187,20 @@ Budget is adaptive: measure our own tick cost, shrink N when frame time rises. T
 overlay (§7) shows this live so your test reports can say *"it hitched when active peds hit 90"*
 instead of *"it hitched."*
 
-### 5.5 Cleanup contract
+### 5.5 Feature flags
+
+Every extra in §7 is a named flag with a declared default, readable from config, overridable
+per-mode, and surfaced as a menu switch. The core riot loop must run correctly with all flags
+off — that's the acceptance criterion, and it's what lets us bisect misbehaviour to a single
+subsystem when you report something looking wrong.
+
+### 5.6 Cleanup contract
 
 Every entity we create or modify is registered. On mode stop, script abort, player death,
 mission start, or fast-travel we restore or release. Missing this is how riot mods poison saves
 and leak until crash — `Aborted` handler is not optional.
 
-### 5.6 Config parsing
+### 5.7 Config parsing
 
 JSON via **Newtonsoft.Json merged into our assembly** (ILRepack, which runs fine on Linux).
 Ships as one DLL, so we can never collide with another mod's copy of Newtonsoft in `scripts/`
@@ -292,26 +299,36 @@ per faction in the menu. Uncapped ped blips are a known framerate and minimap ki
 
 ---
 
-## 7. Things you didn't ask for that I think are worth it
+## 7. Extras beyond the original vision
 
-Ranked by payoff-to-effort. Cut freely.
+**Everything in this section is optional and individually toggleable.** No extra is ever
+load-bearing: each one is a config flag plus a menu switch, the mod runs correctly with all of
+them off, and a mode file can opt in or out per-mode. That's a hard architectural rule, not a
+nice-to-have — it keeps the core testable in isolation and means a broken extra can never take
+the mod down with it.
 
-1. **Escalation phases.** A riot that *builds* — unrest → looting and fires → lockdown — is
-   dramatically better than a flat toggle, and it's mostly a timer over things we're building anyway.
-2. **Riot zones.** Confine to a radius or a named neighbourhood. Solves performance *and*
-   creates the best moments: Vinewood under martial law while Sandy Shores is calm.
-3. **Fires and debris.** Burning cars, tyre fires, smoke columns. Cheap, and it's the visual
-   language of a riot — probably the single highest payoff item on this list.
-4. **Purge specifics.** Countdown, the announcement, a curfew window, and everyone going home
-   at 07:00. Very evocative, almost free once the phase system exists.
-5. **Weather and timecycle per mode.** Purge = night and orange haze, aliens = green fog,
-   military = overcast. One line per mode.
-6. **Pick a side.** Join the rioters, or be neutral press until you shoot first.
-7. **Looting behaviour.** Peds converge on store entrances with carry anims.
-8. **Debug/stats overlay.** Active peds, spawns, kills per faction, our tick cost, budget
-   headroom. Doubles as your bug-report tool and my only telemetry.
-9. **Hot-reload configs on a keybind.** Non-negotiable for our workflow, honestly.
-10. **Profiles.** Save a tuned setup as a named profile; share as a file.
+### Confirmed in scope
+
+| # | Extra | Default |
+|---|---|---|
+| 1 | **Fires and debris.** Burning cars, tyre fires, smoke columns. The visual language of a riot, and the cheapest big win on the list. | On |
+| 2 | **Escalation phases.** The riot *builds* — unrest → looting and fires → lockdown. Mostly a timer over machinery we're building anyway. | On |
+| 3 | **Riot zones.** Confine to a radius or a named neighbourhood. Solves performance *and* creates the best moments: Vinewood under martial law while Sandy Shores is calm. | On, citywide selectable |
+| 4 | **Pick a side.** Join the rioters, or be neutral press until you shoot first. Nearly free once the player is its own relationship group. | Off (neutral-observer default) |
+
+### The other six (only four fit in the picker — your call on these)
+
+| # | Extra | Effort | My read |
+|---|---|---|---|
+| 5 | **Purge specifics.** Countdown, announcement, curfew window, everyone home at 07:00. | Low once phases exist | Strong yes — it's the mode's whole identity |
+| 6 | **Weather and timecycle per mode.** Purge = night and orange haze, aliens = green fog, military = overcast. | Trivial, one line per mode | Yes |
+| 7 | **Looting behaviour.** Peds converge on store entrances with carry anims. | Medium | Nice texture, first thing I'd cut if M5 runs long |
+| 8 | **Debug/stats overlay.** Active peds, spawns, kills per faction, tick cost, budget headroom. | Low | Yes, and selfishly — it's my only telemetry |
+| 9 | **Hot-reload configs on a keybind.** | Low | Effectively non-negotiable for how we work |
+| 10 | **Profiles.** Save a tuned setup by name; share as a file. | Low-medium | Yes, but late — M7 |
+
+Items 8 and 9 I'd argue are workflow infrastructure rather than features, and I'd build them in
+M0–M2 regardless unless you object. 5 and 6 are near-free. 7 and 10 are the genuinely optional ones.
 
 ---
 
@@ -328,8 +345,14 @@ ScriptHookV and SHVDN hook by memory pattern. Every Rockstar patch breaks them u
 authors update. We inherit that entirely. Document it in the README; don't promise otherwise.
 
 ### 8.3 Legacy vs. Enhanced divergence
-The single-build story via SHVDN Enhanced is good, but Enhanced is where surprises live.
-Whichever edition you run becomes the reference; I'll keep the other working on report only.
+**Legacy is the reference target** — that's what you run, so that's what gets tested. The
+single-build story via SHVDN Enhanced still holds and I'll keep Enhanced compiling and
+nominally working, but I won't claim Enhanced support we haven't verified. Enhanced becomes a
+fix-on-report path, and the README should say exactly that rather than implying parity.
+
+Practical upside of Legacy as reference: it's the mature ecosystem, so gameconfig, Heap
+Adjuster, add-on vehicle packs and MP-in-SP unlockers are all well-trodden there. §6.5 and M4
+get easier.
 
 ### 8.4 Online content in SP
 May not stream or may despawn. Optional-with-fallback, never a hard dependency.
@@ -347,17 +370,20 @@ Each one ends in a build you can drop in and test in under five minutes.
 
 | # | Deliverable | Your test |
 |---|---|---|
-| **M0** | Skeleton. Loads, logs a version banner, F7 opens an empty LemonUI menu. CI publishes the DLL. | Does it load on *your* setup, and does the log appear? |
+| **M0** | Skeleton. Loads, logs a version banner, F6 opens an empty LemonUI menu. Feature-flag system and CI publishing the DLL. | Does it load on *your* setup, and does the log appear? |
 | **M1** | Faction engine: relationship matrix, conversion sweep, loadouts, blips, cleanup. One mode: Pedestrians. | Do peds actually fight? Does stopping restore the world? |
-| **M2** | Menu v1: mode picker, intensity, radius, faction toggles, weapon preset picker, hot-reload. | Is it navigable and does it survive a save/reload? |
-| **M3** | Police response + civilian reaction model (flee / fight / mixed slider). | The centrepiece — does "sirens on, ploughing through crowds" actually read right? |
+| **M2** | Menu v1: mode picker, intensity, **riot zones** (radius / neighbourhood / citywide), faction toggles, weapon preset picker, hot-reload, debug overlay. | Is it navigable, and does confining the riot to a zone hold? |
+| **M3** | Police response + civilian reaction model (flee / fight / mixed slider) + **pick a side**. | The centrepiece — does "sirens on, ploughing through crowds" actually read right? |
 | **M4** | Military, roadblocks, model-by-name loader with fallbacks. | Do your add-on/online vehicles resolve? Does it degrade cleanly without them? |
-| **M5** | Criminals (gang territories), Animals, Aliens. | Are animals worth keeping, or a joke mode? |
+| **M5** | Criminals (gang territories), Animals, Aliens. **Escalation phases** and **fires/debris**. | Are animals worth keeping, or a joke mode? Does a riot that builds feel better than one that just is? |
 | **M6** | Purge (timed event, curfew, announcement, timecycle) and Everything. | Where does performance break, and at what ped count? |
 | **M7** | Custom faction builder in-menu, presets, profile save/load. | Can you build a faction without touching JSON? |
-| **M8** | Polish: fires, looting, HUD stats, perf pass, docs, release packaging. | Ship it. |
+| **M8** | Polish: looting, perf pass, docs, release packaging. | Ship it. |
 
 M0–M3 is the honest vertical slice. If M3 feels good, the rest is content.
+
+Every confirmed extra lands behind its own flag, so any of M2's zones, M3's pick-a-side or M5's
+phases and fires can be switched off in the field without a rebuild if it misbehaves.
 
 ---
 
@@ -377,13 +403,15 @@ M0–M3 is the honest vertical slice. If M3 feels good, the rest is content.
 
 ## 11. Open questions
 
-1. **Which edition do you run — Legacy or Enhanced?** Sets the reference target. If you have
-   both, even better.
+1. ~~Which edition do you run?~~ **Answered: Legacy.** Reference target set (§8.3).
 2. **What's already installed?** ScriptHookV, SHVDN (which one), gameconfig, Heap Adjuster,
    LemonUI, any add-on vehicle packs or MP-in-SP unlockers. Changes what M4 can assume.
-3. **F6 or F7?** Both are already taken by popular riot scripts (Los Santos Riot Mod uses F7,
-   Ped Riot/Chaos Mode uses F7, PedPurge uses F10). Suggest we make it **configurable with a
-   default of F6** and detect nothing — just document the clash.
+3. **F6 or F7?** Going with **configurable, default F6** unless you say otherwise — F7 is
+   already taken by both Los Santos Riot Mod and Ped Riot/Chaos Mode, F10 by PedPurge. We won't
+   try to detect clashes, just document them.
 4. **Story mode only, or should FiveM be on the roadmap?** It's a different runtime; assuming
    single-player unless you say otherwise.
-5. **Cut list.** §7 is ten suggestions. Which three do you actually want?
+5. ~~Cut list.~~ **Partly answered.** Fires, escalation phases, riot zones and pick-a-side are
+   in, all as optional toggles (§7). Items 5–10 in the new §7 table are still open — my
+   recommendation is yes to Purge specifics, timecycles, the debug overlay and hot-reload;
+   defer looting and profiles.
