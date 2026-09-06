@@ -30,9 +30,14 @@ namespace TonightsTheNight.Core
         private int _cursor;            // round-robin position in the tracked list
         private int _recruitRotation;   // spreads recruits evenly across factions
         private int _budget;
+        private int _nextWorkAt;        // game time of the next heavy pass
+        private Ped _lastFighter;       // a nearby threat for fleeing peds to run from
 
         public RiotMode ActiveMode { get; private set; }
         public bool IsRunning { get { return ActiveMode != null; } }
+
+        /// <summary>The player's relationship group before we moved them into ours.</summary>
+        private int _playerOriginalGroup;
 
         // Live numbers for the debug overlay and, more importantly, for the log.
         public int TrackedCount { get { return _registry.Count; } }
@@ -67,6 +72,8 @@ namespace TonightsTheNight.Core
             ApplyRelations(mode);
             ApplyPlayerSide(mode);
 
+            _playerOriginalGroup = Function.Call<int>(Hash.GET_PED_RELATIONSHIP_GROUP_HASH, Game.Player.Character);
+
             ActiveMode = mode;
             RecruitedTotal = 0;
             CulledTotal = 0;
@@ -89,6 +96,9 @@ namespace TonightsTheNight.Core
                 _registry.RestoreAll();
             }
 
+            // Must happen before the groups are removed, or the player is left pointing at a
+            // relationship group that no longer exists.
+            RestorePlayerGroup();
             _relationships.Clear();
             _config.ClearModeOverrides();
             ActiveMode = null;
@@ -102,8 +112,10 @@ namespace TonightsTheNight.Core
             try
             {
                 _registry.RestoreAll();
+                RestorePlayerGroup();
                 _relationships.Clear();
                 ActiveMode = null;
+                _lastFighter = null;
             }
             catch (Exception ex)
             {
@@ -118,9 +130,17 @@ namespace TonightsTheNight.Core
             _stopwatch.Restart();
             try
             {
+                // Density natives are per-frame, so they run every frame or they visibly
+                // stutter between values.
                 ApplyDensity();
-                Recruit();
-                ProcessTracked();
+
+                // Recruiting and retasking are the expensive half and do not need frame rate.
+                if (Game.GameTime >= _nextWorkAt)
+                {
+                    _nextWorkAt = Game.GameTime + _config.GetInt("engine.workIntervalMs", 50);
+                    Recruit();
+                    ProcessTracked();
+                }
             }
             catch (Exception ex)
             {
@@ -209,8 +229,13 @@ namespace TonightsTheNight.Core
 
                 Reaction reaction = faction.ResolveReaction(_random);
                 TrackedPed entry = _registry.Add(ped, faction, reaction, false);
-                _conditioner.Apply(ped, faction, reaction);
+                _conditioner.Apply(ped, faction, reaction, _lastFighter);
                 entry.LastTaskedAt = Game.GameTime;
+
+                // Recruits come from one sweep around the player, so the last fighter we made
+                // is reliably close by - good enough to give panicking peds something real to
+                // run from without paying for a search.
+                if (reaction == Reaction.Fight) { _lastFighter = ped; }
 
                 AttachBlip(entry);
 
@@ -309,7 +334,7 @@ namespace TonightsTheNight.Core
                     !entry.Ped.IsInCombat &&
                     Game.GameTime - entry.LastTaskedAt > retaskAfterMs)
                 {
-                    _conditioner.IssueTask(entry.Ped, entry.Faction, entry.Reaction);
+                    _conditioner.IssueTask(entry.Ped, entry.Faction, entry.Reaction, _lastFighter);
                     entry.LastTaskedAt = Game.GameTime;
                 }
 
@@ -416,6 +441,25 @@ namespace TonightsTheNight.Core
             }
 
             Log.Info("Player is neutral (factions treat them as " + stance + ").");
+        }
+
+        /// <summary>
+        /// Puts the player back in their vanilla group. Skipping this leaves them assigned to a
+        /// group we are about to delete, which is exactly the kind of quiet damage that only
+        /// shows up as "the world felt wrong after I stopped it".
+        /// </summary>
+        private void RestorePlayerGroup()
+        {
+            try
+            {
+                int target = _playerOriginalGroup != 0 ? _playerOriginalGroup : Game.GenerateHash("PLAYER");
+                Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, Game.Player.Character, target);
+                _playerOriginalGroup = 0;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not restore the player's relationship group", ex);
+            }
         }
     }
 }

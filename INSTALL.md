@@ -69,8 +69,13 @@ Each file in `modes/` is one mode: the factions in play, who hates whom, and any
 mode overrides. To make your own, copy a stock file, rename it, and edit — a custom faction
 needs no code.
 
-Stock mode files carry a `"_stock": true` marker. Remove that line (or just edit the file) and
-updates will stop overwriting your version.
+Stock mode files carry a `"_stock": true` marker, which is what tells an update the file is
+still ours to replace. **Delete that line** and the file becomes yours permanently — updates
+will never touch it again. Editing a file while leaving the marker in place is not enough: the
+next update will overwrite your changes.
+
+The safer habit is to copy a stock file to a new name and edit the copy. Only files matching a
+shipped mode name are ever rewritten.
 
 ## Compatibility with police, wanted and overhaul mods
 

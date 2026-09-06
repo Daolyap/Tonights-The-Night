@@ -34,7 +34,7 @@ namespace TonightsTheNight.Core
             _random = random;
         }
 
-        public void Apply(Ped ped, Faction faction, Reaction reaction)
+        public void Apply(Ped ped, Faction faction, Reaction reaction, Ped threat = null)
         {
             _relationships.ApplyToPed(ped, faction.GroupHash);
 
@@ -51,7 +51,7 @@ namespace TonightsTheNight.Core
                 Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.AlwaysFight, false);
             }
 
-            IssueTask(ped, faction, reaction);
+            IssueTask(ped, faction, reaction, threat);
         }
 
         private void ApplyCombatConditioning(Ped ped)
@@ -141,7 +141,7 @@ namespace TonightsTheNight.Core
             return hash;
         }
 
-        public void IssueTask(Ped ped, Faction faction, Reaction reaction)
+        public void IssueTask(Ped ped, Faction faction, Reaction reaction, Ped threat = null)
         {
             try
             {
@@ -155,7 +155,13 @@ namespace TonightsTheNight.Core
                         break;
 
                     case Reaction.Flee:
-                        ped.Task.ReactAndFlee(Game.Player.Character);
+                        // Run from an actual rioter where we know of one. Falling back to the
+                        // player is a poor second - it reads as "everyone hates you" rather
+                        // than "everyone is scared of the riot".
+                        Ped source = threat != null && threat.Exists() && threat.Handle != ped.Handle
+                            ? threat
+                            : Game.Player.Character;
+                        ped.Task.ReactAndFlee(source);
                         break;
 
                     case Reaction.Cower:

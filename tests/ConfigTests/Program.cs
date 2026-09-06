@@ -98,6 +98,9 @@ class Program
             Check("TryParse survives: " + (bad.Length > 20 ? bad.Substring(0, 20) : bad), ok);
         }
 
+        Console.WriteLine("--- every config path the code reads is declared in defaults ---");
+        failures += ConfigPathCoverage.Run();
+
         Console.WriteLine();
         Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : failures + " CHECK(S) FAILED");
         return failures == 0 ? 0 : 1;

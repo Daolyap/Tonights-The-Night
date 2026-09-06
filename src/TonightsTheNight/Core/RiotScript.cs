@@ -25,6 +25,7 @@ namespace TonightsTheNight.Core
         private Keys _reloadKey = Keys.F5;
         private int _nextWatchCheck;
         private bool _initialised;
+        private bool _greeted;
 
         public RiotScript()
         {
@@ -60,15 +61,12 @@ namespace TonightsTheNight.Core
             _overlay = new DebugOverlay(_config);
             _menu = new RiotMenu(_config, _director, _modes, ReloadEverything);
 
-            Interval = _config.GetInt("engine.tickIntervalMs", 50);
+            // Every frame. LemonUI needs it for responsive input, the overlay needs it or it
+            // flickers, and the per-frame density natives need it or the crowd pulses. The
+            // expensive work is throttled inside the Director instead.
+            Interval = 0;
 
             Log.Info("Ready. Menu key: " + _menuKey + ", reload key: " + _reloadKey + ".");
-            GTA.UI.Notification.Show("~g~Tonight's The Night~s~ v" + DefaultConfig.Version + " loaded. Press ~b~" + _menuKey + "~s~.");
-
-            if (_config.LoadError != null)
-            {
-                GTA.UI.Notification.Show("~o~Config problem:~s~ " + _config.LoadError);
-            }
         }
 
         private void OnTick(object sender, EventArgs e)
@@ -77,6 +75,7 @@ namespace TonightsTheNight.Core
 
             try
             {
+                Greet();
                 _menu.Process();
                 _director.Tick();
                 _overlay.Draw(_director, _modes.Modes.Count);
@@ -85,6 +84,24 @@ namespace TonightsTheNight.Core
             catch (Exception ex)
             {
                 Log.Error("Tick failed", ex);
+            }
+        }
+
+        /// <summary>
+        /// The startup notification is deferred out of the constructor. Natives called before
+        /// the game is fully up can fail silently, and a mod that loads without saying so is
+        /// indistinguishable from one that did not load at all.
+        /// </summary>
+        private void Greet()
+        {
+            if (_greeted) { return; }
+            _greeted = true;
+
+            GTA.UI.Notification.Show("~g~Tonight's The Night~s~ v" + DefaultConfig.Version + " loaded. Press ~b~" + _menuKey + "~s~.");
+
+            if (_config.LoadError != null)
+            {
+                GTA.UI.Notification.Show("~o~Config problem:~s~ " + _config.LoadError);
             }
         }
 
@@ -146,8 +163,6 @@ namespace TonightsTheNight.Core
                 Compatibility.Reset();
                 _modes.Load();
                 _menu.Rebuild();
-
-                Interval = _config.GetInt("engine.tickIntervalMs", 50);
 
                 if (runningId != null && restart)
                 {

@@ -33,9 +33,8 @@ namespace TonightsTheNight.Config
             // Budget-first: these are the numbers that decide whether the mod runs or hitches.
             JsonValue engine = JsonValue.NewObject();
             engine.Set("pedsPerTick", JsonValue.Of(12));
-            engine.Set("tickIntervalMs", JsonValue.Of(50));
-            engine.Set("nearDistance", JsonValue.Of(150));
-            engine.Set("midDistance", JsonValue.Of(400));
+            // The script itself ticks every frame; this throttles only recruiting and retasking.
+            engine.Set("workIntervalMs", JsonValue.Of(50));
             engine.Set("cullDistance", JsonValue.Of(450));
             engine.Set("maxTrackedPeds", JsonValue.Of(120));
             engine.Set("adaptiveBudget", JsonValue.Of(true));
@@ -67,6 +66,20 @@ namespace TonightsTheNight.Config
             combat.Set("combatAbility", JsonValue.Of(1));    // 0 poor, 1 average, 2 professional
             combat.Set("seeingRange", JsonValue.Of(60));
             combat.Set("hearingRange", JsonValue.Of(60));
+
+            // SET_PED_COMBAT_ATTRIBUTES IDs. These are community-documented rather than
+            // official and are the most likely thing here to be quietly wrong, so they are
+            // tunable: if rioters stand around doing nothing, try other values for alwaysFight
+            // (46, 5, 1, 17) and reload with the reload key rather than waiting for a new build.
+            JsonValue attributeIds = JsonValue.NewObject();
+            attributeIds.Set("alwaysFight", JsonValue.Of(46));
+            attributeIds.Set("canUseCover", JsonValue.Of(0));
+            attributeIds.Set("canUseVehicles", JsonValue.Of(1));
+            attributeIds.Set("canDoDrivebys", JsonValue.Of(2));
+            attributeIds.Set("canLeaveVehicle", JsonValue.Of(3));
+            attributeIds.Set("canFightArmedWhenUnarmed", JsonValue.Of(5));
+            combat.Set("attributeIds", attributeIds);
+
             root.Set("combat", combat);
 
             JsonValue blips = JsonValue.NewObject();

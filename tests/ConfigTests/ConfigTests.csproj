@@ -15,6 +15,7 @@
   -->
   <ItemGroup>
     <Compile Include="../../src/TonightsTheNight/Util/Json.cs" />
+    <Compile Include="../../src/TonightsTheNight/Config/DefaultConfig.cs" />
   </ItemGroup>
 
 </Project>

@@ -131,14 +131,22 @@ keep working** on the previous settings rather than dying.
 
 ### If T4 showed peds standing around
 
-This is why the combat-attribute IDs are exposed in config. Add this to `user.json` and press F5:
+This is the failure I most expect, and it's why the combat-attribute IDs are tunable rather than
+compiled in. They're community-documented rather than official, and `alwaysFight` is the one
+most likely to be wrong.
+
+Put this in `user.json`:
 
 ```jsonc
 { "combat": { "attributeIds": { "alwaysFight": 46 } } }
 ```
 
-Try `46`, then `5`, then `1`, then `17`, restarting the mode after each F5. If one of them makes
-peds fight, tell me which — that's a one-line fix rather than a guessing game across builds.
+Then, without leaving the game: change the number, press **F5**, stop and restart the mode,
+watch. Try **46**, then **5**, then **1**, then **17**. If one of them makes peds fight, tell me
+which — that turns a guessing game across four builds into four minutes.
+
+The full set is in `defaults.json` under `combat.attributeIds` if you want to see what else is
+adjustable.
 
 ---
 
