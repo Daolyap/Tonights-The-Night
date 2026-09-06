@@ -142,7 +142,10 @@ src/TonightsTheNight/
   Config/ConfigStore.cs
   Util/Log.cs, ModelCache.cs, Natives.cs
 config/
+  defaults.json          # ships with the mod, never hand-edited
+  user.json              # your overrides, survives updates
   modes/*.json  factions/*.json  presets/weapons/*.json
+  profiles/*.json        # saved setups
 docs/  TESTING.md  CONFIG.md
 .github/workflows/build.yml
 ```
@@ -187,12 +190,31 @@ Budget is adaptive: measure our own tick cost, shrink N when frame time rises. T
 overlay (§7) shows this live so your test reports can say *"it hitched when active peds hit 90"*
 instead of *"it hitched."*
 
-### 5.5 Feature flags
+### 5.5 Feature flags and settings
 
-Every extra in §7 is a named flag with a declared default, readable from config, overridable
-per-mode, and surfaced as a menu switch. The core riot loop must run correctly with all flags
-off — that's the acceptance criterion, and it's what lets us bisect misbehaviour to a single
-subsystem when you report something looking wrong.
+Every extra in §7 is **optional and customisable** — those are two separate requirements and
+both are architectural rules:
+
+- **Optional.** A named boolean flag with a declared default. The core riot loop must run
+  correctly with every flag off. That's the acceptance criterion, and it's what lets us bisect
+  a misbehaviour to one subsystem from a one-line bug report.
+- **Customisable.** Each extra owns a **settings block**, not just a switch. Turning fires on
+  shouldn't mean accepting my idea of how many fires. §7 lists the knobs per extra.
+
+**Four-layer resolution**, each overriding the last:
+
+| Layer | File | Who owns it |
+|---|---|---|
+| 1. Defaults | `config/defaults.json` | ships with the mod, never edited by you |
+| 2. User | `config/user.json` | yours, survives every mod update untouched |
+| 3. Mode | `config/modes/*.json` | per-mode overrides, so Purge can force night without changing your global setting |
+| 4. Live | menu / hot-reload | this session only, unless you save it to a profile |
+
+Layer 2 existing separately from layer 1 matters more than it looks: it means updating the mod
+never clobbers your tuning, and "reset to defaults" is just deleting a file.
+
+Unknown keys are ignored with a log line rather than throwing, so a config written against a
+newer version never hard-fails an older build.
 
 ### 5.6 Cleanup contract
 
@@ -301,34 +323,29 @@ per faction in the menu. Uncapped ped blips are a known framerate and minimap ki
 
 ## 7. Extras beyond the original vision
 
-**Everything in this section is optional and individually toggleable.** No extra is ever
-load-bearing: each one is a config flag plus a menu switch, the mod runs correctly with all of
-them off, and a mode file can opt in or out per-mode. That's a hard architectural rule, not a
-nice-to-have — it keeps the core testable in isolation and means a broken extra can never take
-the mod down with it.
+**All ten are in scope. All ten are optional and individually customisable.** Every row below
+is a flag plus a settings block resolved through the four layers in §5.5. The mod runs correctly
+with all of them off; none is load-bearing for another, except where the Depends column says so.
 
-### Confirmed in scope
+| # | Extra | Default | Customisable | Depends |
+|---|---|---|---|---|
+| 1 | **Fires and debris** | On | Density, max simultaneous fires, spread rate and whether spread is on at all, sources (vehicles / dumpsters / tyre piles / props), smoke columns, burn-out time, whether fires damage peds | — |
+| 2 | **Escalation phases** | On | Phase count, duration of each, trigger type (elapsed time / kill count / both), thresholds, which factions and features enter at which phase, whether it holds at max or loops, manual phase-skip from the menu | — |
+| 3 | **Riot zones** | On | Shape (radius / named neighbourhood / citywide), radius, anchor (follows player or fixed point), edge behaviour (peds calm down vs. despawn outside), multiple simultaneous zones, zone visible on map | — |
+| 4 | **Pick a side** | Off | Which faction you join or none, whether neutrality breaks on your first shot, whether allies defend you, friendly-fire on/off, whether cops recognise your allegiance | — |
+| 5 | **Purge specifics** | On (Purge mode only) | Start and end time, countdown length, announcement on/off, siren audio on/off, curfew behaviour (peds go home vs. simply stand down), whether police stand down during the window, post-purge cleanup behaviour | 2 |
+| 6 | **Weather and timecycle** | On | Weather type and whether it's locked, time of day, whether time is frozen, timecycle modifier name and strength, all overridable per-mode — and a global "never touch my weather" master switch | — |
+| 7 | **Looting** | On | Share of rioters who loot, target types (storefronts / vehicles / both), carry props on/off, whether looting starts fires, how long before a looter rejoins the riot | — |
+| 8 | **Debug overlay** | Off | Which panels (perf / entity counts / per-faction kills / spawn failures / budget headroom), screen position, opacity, its own keybind, and a log-only mode with no on-screen draw | — |
+| 9 | **Hot-reload configs** | On | Keybind, auto-watch file timestamps on/off, and whether a reload restarts the running mode or applies live to existing entities | — |
+| 10 | **Named profiles** | On | Save / load / rename / delete, autoload a named profile at startup, what a profile captures (everything, or just the extras), export and import as a file | — |
 
-| # | Extra | Default |
-|---|---|---|
-| 1 | **Fires and debris.** Burning cars, tyre fires, smoke columns. The visual language of a riot, and the cheapest big win on the list. | On |
-| 2 | **Escalation phases.** The riot *builds* — unrest → looting and fires → lockdown. Mostly a timer over machinery we're building anyway. | On |
-| 3 | **Riot zones.** Confine to a radius or a named neighbourhood. Solves performance *and* creates the best moments: Vinewood under martial law while Sandy Shores is calm. | On, citywide selectable |
-| 4 | **Pick a side.** Join the rioters, or be neutral press until you shoot first. Nearly free once the player is its own relationship group. | Off (neutral-observer default) |
+Two notes on defaults. **Pick a side defaults off** because neutral-observer is what you want the
+first time you load a mode. **The debug overlay defaults off** but its logging half is always on
+— I need the log regardless, you shouldn't have to look at numbers on your screen to give me one.
 
-### The other six (only four fit in the picker — your call on these)
-
-| # | Extra | Effort | My read |
-|---|---|---|---|
-| 5 | **Purge specifics.** Countdown, announcement, curfew window, everyone home at 07:00. | Low once phases exist | Strong yes — it's the mode's whole identity |
-| 6 | **Weather and timecycle per mode.** Purge = night and orange haze, aliens = green fog, military = overcast. | Trivial, one line per mode | Yes |
-| 7 | **Looting behaviour.** Peds converge on store entrances with carry anims. | Medium | Nice texture, first thing I'd cut if M5 runs long |
-| 8 | **Debug/stats overlay.** Active peds, spawns, kills per faction, tick cost, budget headroom. | Low | Yes, and selfishly — it's my only telemetry |
-| 9 | **Hot-reload configs on a keybind.** | Low | Effectively non-negotiable for how we work |
-| 10 | **Profiles.** Save a tuned setup by name; share as a file. | Low-medium | Yes, but late — M7 |
-
-Items 8 and 9 I'd argue are workflow infrastructure rather than features, and I'd build them in
-M0–M2 regardless unless you object. 5 and 6 are near-free. 7 and 10 are the genuinely optional ones.
+Item 5 needs item 2's phase machinery, so if you ever switch escalation off, Purge falls back to
+a flat timed window rather than breaking.
 
 ---
 
@@ -370,20 +387,21 @@ Each one ends in a build you can drop in and test in under five minutes.
 
 | # | Deliverable | Your test |
 |---|---|---|
-| **M0** | Skeleton. Loads, logs a version banner, F6 opens an empty LemonUI menu. Feature-flag system and CI publishing the DLL. | Does it load on *your* setup, and does the log appear? |
+| **M0** | Skeleton. Loads, logs a version banner, F6 opens an empty LemonUI menu. Four-layer config, **flag + settings system**, **hot-reload** (9), logging. CI publishes the DLL. | Does it load on *your* setup, and does editing `user.json` + hot-reloading take effect? |
 | **M1** | Faction engine: relationship matrix, conversion sweep, loadouts, blips, cleanup. One mode: Pedestrians. | Do peds actually fight? Does stopping restore the world? |
-| **M2** | Menu v1: mode picker, intensity, **riot zones** (radius / neighbourhood / citywide), faction toggles, weapon preset picker, hot-reload, debug overlay. | Is it navigable, and does confining the riot to a zone hold? |
-| **M3** | Police response + civilian reaction model (flee / fight / mixed slider) + **pick a side**. | The centrepiece — does "sirens on, ploughing through crowds" actually read right? |
+| **M2** | Menu v1: mode picker, intensity, **riot zones** (3), faction toggles, weapon preset picker, **debug overlay** (8), and a settings page per extra. | Is it navigable, does confining the riot to a zone hold, and can you retune every extra without leaving the game? |
+| **M3** | Police response + civilian reaction model (flee / fight / mixed slider) + **pick a side** (4). | The centrepiece — does "sirens on, ploughing through crowds" actually read right? |
 | **M4** | Military, roadblocks, model-by-name loader with fallbacks. | Do your add-on/online vehicles resolve? Does it degrade cleanly without them? |
-| **M5** | Criminals (gang territories), Animals, Aliens. **Escalation phases** and **fires/debris**. | Are animals worth keeping, or a joke mode? Does a riot that builds feel better than one that just is? |
-| **M6** | Purge (timed event, curfew, announcement, timecycle) and Everything. | Where does performance break, and at what ped count? |
-| **M7** | Custom faction builder in-menu, presets, profile save/load. | Can you build a faction without touching JSON? |
-| **M8** | Polish: looting, perf pass, docs, release packaging. | Ship it. |
+| **M5** | Criminals (gang territories), Animals, Aliens. **Escalation phases** (2), **fires and debris** (1), **weather/timecycle** (6). | Are animals worth keeping, or a joke mode? Does a riot that builds feel better than one that just is? |
+| **M6** | **Purge specifics** (5) — countdown, curfew, announcement — and Everything mode. | Where does performance break, and at what ped count? |
+| **M7** | Custom faction builder in-menu, weapon presets, **named profiles** (10) with import/export. | Can you build a faction and save a tuned setup without touching JSON? |
+| **M8** | **Looting** (7), perf pass, docs, release packaging. | Ship it. |
 
 M0–M3 is the honest vertical slice. If M3 feels good, the rest is content.
 
-Every confirmed extra lands behind its own flag, so any of M2's zones, M3's pick-a-side or M5's
-phases and fires can be switched off in the field without a rebuild if it misbehaves.
+Every extra lands behind its own flag with its own settings block, so anything that misbehaves
+in the field can be switched off — or retuned — without waiting on a rebuild. The numbers in
+brackets map to the §7 table.
 
 ---
 
@@ -411,7 +429,6 @@ phases and fires can be switched off in the field without a rebuild if it misbeh
    try to detect clashes, just document them.
 4. **Story mode only, or should FiveM be on the roadmap?** It's a different runtime; assuming
    single-player unless you say otherwise.
-5. ~~Cut list.~~ **Partly answered.** Fires, escalation phases, riot zones and pick-a-side are
-   in, all as optional toggles (§7). Items 5–10 in the new §7 table are still open — my
-   recommendation is yes to Purge specifics, timecycles, the debug overlay and hot-reload;
-   defer looting and profiles.
+5. ~~Cut list.~~ **Answered: all ten are in**, each optional and customisable (§7), scheduled
+   across M0–M8. Nothing left open here — the remaining question is whether any *default* in
+   the §7 table is wrong, and that's cheaper to answer by playing it than by guessing now.
