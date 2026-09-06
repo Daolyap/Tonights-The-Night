@@ -1,149 +1,138 @@
-# v0.3.0 — test script
+# v0.4.0 — test script
 
-Three new systems, none of which have ever run in a game: **car chases**, **looting** and
-**weapon presets**. Everything below is an assumption until you check it.
+This build is mostly your bug list. The important thing to check is whether **the crowd now
+picks the right enemy**, because that was one design mistake showing up as four separate
+symptoms.
 
-Roughly 20 minutes. Take the log either way: `scripts/TonightsTheNight.log`.
+**Delete `scripts/TonightsTheNight/modes/` before you start.** Every mode file changed. Leave
+`user.json` alone — it is never touched.
+
+Turn the debug overlay on (**F6 → Features → Debug Overlay**). It shows the purge countdown and
+the chase and looting counts.
 
 | | Test | The question it answers |
 |---|---|---|
-| C1 | **Car chases** | **Hurt someone, drive off — does a carload come after you?** |
-| C2 | Chase crew | Do allies get in the *same* car, or does one person leave alone? |
-| C3 | Losing them | Does the chase end sensibly, and does the crew go back to normal? |
-| L1 | Looting | Do people carry things off once the riot escalates? |
-| L2 | Car theft | Do some looters take a parked car instead? |
-| W1 | Weapon presets | Does picking a preset change what new recruits carry? |
-| X1 | Cleanup | After all of that, does stopping still restore the world? |
-
-C1 and C3 are the two that decide whether chases work. The rest is detail.
+| A1 | **Martial Law** | **Do civilians fight the army instead of you?** |
+| A2 | Police State | Same, plus: does the response feel like a police state? |
+| A3 | Invasion | Do the aliens look like aliens? |
+| B1 | **Rioters driving** | **Do drivers do four different things instead of all getting out?** |
+| B2 | Pedestrian Chaos | Does a free-for-all still let your passengers be on your side? |
+| C1 | The Purge | Does it end, and are you left alone by the police? |
+| D1 | No side effects | Is your clock, weather and wanted level untouched? |
 
 ---
 
-## Before you start
+## A1 — Martial Law *(the real test)*
 
-Delete `scripts/TonightsTheNight/defaults.json`. It is rewritten on a version change anyway, but
-deleting it makes sure you are reading the new one. **Leave `user.json` alone** — it is never
-touched.
+1. Start **Martial Law** in a busy area.
+2. Stand in the crowd and watch. Do not shoot anything.
 
-Mode files are unchanged this version, so there is no need to delete `modes/` this time.
-
-Turn the debug overlay on (**F6 → Features → Debug Overlay**). It now shows a `chases:` and
-`looting:` line, which is the fastest way to tell "it didn't trigger" from "it triggered and
-looked wrong" — a distinction I can't make from a description.
-
----
-
-## C1 — Car chases *(the real test)*
-
-1. Start **Pedestrian Riot** or **The Purge**.
-2. Get in a car.
-3. **Shoot someone**, or run someone over. Anyone the riot has taken over.
-4. **Drive away.** Properly — above about 20 km/h. Sitting still doesn't count.
-
-**Expect:** within a few seconds, a notification (*"Red Mob are coming after you"*), a blip on
-their car, and a carload behind you. The blip flashes when they're close.
+**Expect:** police first, then soldiers. Civilians run or fight back — roughly half each — and
+they fight *the soldiers*. They should walk past you, not at you.
 
 **Tell me:**
-- Did it trigger at all? If not, does the overlay's `chases:` count stay at 0?
-- How long between the shot and the car appearing?
-- Did they actually *find* you, or drive vaguely in your direction?
-- Did the passengers shoot at you?
+- Did any civilian attack you unprovoked? That is the bug returning.
+- Did civilians fight each other? Also the bug.
+- Did enough of them fight back, or is it still mostly running?
 
-**If nothing happens:** the most likely cause is no suitable car near the ped you shot. They
-prefer a car their side is already in and otherwise take the nearest empty one within 45m —
-downtown should be dense enough, an empty stretch of freeway will not be. Try it on a busy
-street. Second most likely: you weren't moving fast enough.
+3. Now stay in it for three minutes and watch the phases.
 
-## C2 — Chase crew
+**Expect:** phase two brings armour and helicopters. Phase three adds boats *if you are near
+water* — try Vespucci Beach for that, and expect nothing inland, which is correct.
 
-The design intent is a **carload**, not a car: the driver waits until everyone assigned is in
-before setting off, with a seven-second limit after which stragglers get put in.
+**Tell me:** did helicopters turn up, and did they do anything once they had? `TASK_HELI_MISSION`
+has more arguments than anyone is confident about, so "they hovered uselessly" and "they parked
+on a roof" are both real possibilities and both fixable from `defaults.json` under
+`features.air`.
 
-**Tell me:** how many people were in the car, and whether you saw them run to it or just appear
-in it. Both are legal; I want to know which one you actually get.
+## A2 — Police State
 
-## C3 — Losing them, and what happens after
+Same test. Additionally: does it feel like a *state* now? Two cars of four every eight seconds,
+riot vans of six from phase two, a helicopter in phase three.
 
-1. Drive away hard. Get 300m+ ahead and stay there.
-2. **Expect:** after about twelve seconds they lose interest. Log line: `Pursuit by '...' ended:
-   player escaped.`
-3. Now go back and find them.
+**Tell me** if it is now too much rather than too little — that is a slider, and easier to judge
+from playing than from guessing.
 
-**Expect:** they get out of the car and rejoin the riot normally.
+## A3 — Invasion
 
-**This is the one I'd most like checked.** A chase leaves peds with "don't leave the vehicle"
-set, and if ending the chase doesn't clear it they'd sit in a parked car for the rest of the
-session. If you find a stationary car with four rioters just sitting in it, that's the bug.
+The aliens were arriving as "half a suit and a man in all black". Every spawned ped now gets its
+default outfit set explicitly, which is the usual cause.
 
-Other endings to try: wreck their car (should end immediately), or kill the driver (someone else
-should take the wheel, or the chase should end).
+**Tell me** whether they look right. If they still don't, a screenshot would settle it — and
+there is a per-faction `"outfit": "random"` in the mode file to try before I rebuild anything.
 
 ---
 
-## L1 — Looting
+## B1 — Rioters driving *(the other real test)*
 
-Looting only runs during phases a mode marks as looting phases, so it will **not** start
-immediately.
+1. Start **Pedestrian Riot** or **Pedestrian Chaos**.
+2. Drive through it at speed. Then park and watch the traffic.
 
-1. Start **Pedestrian Riot**, then **F6 → Skip To Next Phase** to skip ahead.
-2. Watch the crowd for a minute.
+**Expect:** four different behaviours, roughly 3:3:2:2 — some stop and get out to fight, some
+drive off after another rioter, some come after you, some drive away from you. Anyone with a gun
+shoots out of the window.
 
-**Expect:** people picking up a television, a case or a bin bag and running off with it. The
-overlay's `looting:` count should climb.
+**Before, all of them stopped and got out.** If that is still what you see, tell me and check the
+sliders under **F6 → Rioters Driving** — the weights are live.
 
-**Tell me:** what they were carrying and whether it looked attached to their hand or floating
-somewhere near it. The attachment offsets are guesswork — I can't see them.
+**Tell me** if the mix is wrong. It is four numbers in a menu, so "too many chase me" is a
+two-second fix rather than a rebuild.
 
-The log says how many of the ten prop models your install actually has:
-`Looting: N of 10 loot props available.` If that says 0, none of my prop names were right and
-I'll need the log to pick better ones.
+## B2 — Pedestrian Chaos
 
-## L2 — Car theft
+New mode. Everyone kills everyone, police included, and you are fair game.
 
-Some looters take a nearby parked car instead. **Expect** occasional peds getting into a car and
-driving off with it. Roughly one looter in four, so give it a couple of minutes.
+**Expect:** people in the same car do *not* kill each other. That is the one exception, and it
+works by putting car-mates on the same side under the hood.
 
----
-
-## W1 — Weapon presets
-
-**F6 → Weapons → Preset.**
-
-1. Start a riot on the default (**Mode's Own**) and note what people carry — mostly melee.
-2. Switch the preset to **Military** mid-riot.
-3. Wait. The riot keeps recruiting continuously, so new recruits should start appearing with
-   carbines within a few seconds.
-
-**Expect:** it changes what *new* people carry, not what the people already out there have.
-
-**Also worth one look:** switch to **Chaos** and confirm it is as stupid as intended.
-
-**Tell me** if any preset produces obviously unarmed crowds — that means a weapon name is wrong,
-and the log will have `Unknown weapon '...'` lines naming it.
+**Tell me** if you ever see two people in one car fighting.
 
 ---
 
-## X1 — Cleanup
+## C1 — The Purge
 
-After all of the above, in one session:
+1. Start **The Purge**. Note the time on the overlay.
+2. Get a wanted level on purpose — shoot at something, ram a police car.
+3. Wait it out. Twelve minutes.
 
-1. **F6 → Stop Riot.**
-2. Look around, then save and reload.
+**Expect:**
+- Your wanted level drops and stays down for the whole window.
+- The overlay counts down, and the log has a line a minute.
+- At zero it announces the end and the mode stops.
+- **Your wanted ceiling comes back.** With your OIV pack that means six stars again.
 
-**Expect:** everyone walking normally, no blips, no props stuck to anyone's hand, no cars full of
-rioters, no chase blip left on the map.
+**Check the ceiling afterwards** — start a fight with the police after the purge ends and confirm
+you can still reach six stars. This is the one place the mod touches the wanted system at all,
+and getting the restore wrong would look exactly like your police pack breaking.
+
+If twelve minutes is too long to sit through, drop `features.purge.durationMinutes` to 2 in
+`user.json` and reload with **F5**.
+
+---
+
+## D1 — No side effects
+
+Across all of the above:
+
+**Expect:** your clock never changes. Your weather never changes. No colour grading. If any of
+those move, that is a bug now rather than a feature — the switches are all off by default and
+the modes no longer ask for any of it.
+
+Then **F6 → Stop Riot**, save and reload.
+
+**Expect:** everyone normal, no blips, no props in hands, nobody stuck sitting in a parked car,
+your wanted ceiling back where it was.
 
 ---
 
 ## What I most want back
 
-In rough priority:
-
-1. **Did a chase trigger, and did it find you?** (C1)
-2. **Did the crew come back to normal afterwards, or get stuck in the car?** (C3)
-3. Did looters carry things, and did the props sit in their hands properly? (L1)
-4. Did stopping still clean everything up? (X1)
+1. **Did civilians fight the army instead of you?** (A1)
+2. **Did drivers do four different things?** (B1)
+3. Did the purge end, and did your six stars come back? (C1)
+4. Are the new spawn rates right, too heavy, or still too light?
 5. The log file, whatever happened.
 
-Screenshots of a chase or a looter are worth a lot here — the parts I can't check are all
-visual.
+Points 4 and 5 matter most for the things I cannot see. Everything in this build is either a
+slider or a value in `defaults.json`, so "too much" and "too little" are both cheap to fix — but
+only if I know which.

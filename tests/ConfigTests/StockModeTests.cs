@@ -17,6 +17,8 @@ public static class StockModeTests
     private static readonly string[] ValidReactions = { "Fight", "Flee", "Mixed", "Cower", "Bystander" };
     private static readonly string[] ValidRelations = { "companion", "respect", "like", "neutral", "dislike", "hate" };
     private static readonly string[] ValidRecruits = { "civilian", "male", "female", "criminal", "any", "none" };
+    private static readonly string[] ValidVehicleTypes = { "land", "air", "water" };
+    private static readonly string[] ValidOutfits = { "default", "random" };
 
     private static int _failures;
 
@@ -134,12 +136,53 @@ public static class StockModeTests
                     }
                 }
 
+                if (faction.Has("playerRelationship"))
+                {
+                    string stance = faction["playerRelationship"].AsString("");
+                    Check(fid + ": player relationship '" + stance + "' is valid",
+                          Array.IndexOf(ValidRelations, stance) >= 0);
+                }
+
+                if (faction.Has("outfit"))
+                {
+                    string outfit = faction["outfit"].AsString("");
+                    Check(fid + ": outfit '" + outfit + "' is valid", Array.IndexOf(ValidOutfits, outfit) >= 0);
+                }
+
+                if (faction.Has("spawn"))
+                {
+                    JsonValue spawn = faction["spawn"];
+                    string vehicleType = spawn["vehicleType"].AsString("land");
+
+                    Check(fid + ": vehicle type '" + vehicleType + "' is valid",
+                          Array.IndexOf(ValidVehicleTypes, vehicleType) >= 0);
+
+                    // Air and water arrivals have nothing to arrive in otherwise, and would
+                    // silently fall back to walking - from the sea.
+                    if (vehicleType != "land")
+                    {
+                        Check(fid + ": '" + vehicleType + "' faction declares vehicles", spawn["vehicles"].Count > 0);
+                        Check(fid + ": '" + vehicleType + "' faction always arrives in one",
+                              spawn["inVehicleChance"].AsDouble(0) >= 1.0,
+                              "inVehicleChance " + spawn["inVehicleChance"].AsDouble(0));
+                    }
+
+                    int occupants = spawn["occupants"].AsInt(2);
+                    Check(fid + ": occupant count is sane", occupants > 0 && occupants <= 12, occupants.ToString());
+
+                    int perVehicleWave = spawn["vehiclesPerWave"].AsInt(1);
+                    Check(fid + ": vehicles per wave is sane", perVehicleWave > 0 && perVehicleWave <= 4,
+                          perVehicleWave.ToString());
+                }
+
                 int fromPhase = faction["fromPhase"].AsInt(0);
                 int phaseCount = mode["escalation"]["phases"].Count;
                 Check(fid + ": fromPhase exists in this mode",
                       phaseCount == 0 || fromPhase < phaseCount,
                       "fromPhase " + fromPhase + " but only " + phaseCount + " phase(s)");
             }
+
+            CheckCrowdCohesion(id, mode, factionIds);
 
             Check(id + ": defines factions", factionIds.Count > 0);
             Check(id + ": something can populate the riot", recruiting > 0 || factionIds.Count > 0);
@@ -173,6 +216,49 @@ public static class StockModeTests
         }
 
         return _failures;
+    }
+
+    /// <summary>
+    /// Catches the crowd fighting itself.
+    ///
+    /// Every faction recruited from the ambient crowd is, to the player, "the people". When two
+    /// of them hate each other, what you see is pedestrians attacking pedestrians - which is
+    /// right for a riot and completely wrong for Martial Law, where they are supposed to be one
+    /// crowd against an occupation. That distinction is invisible in the JSON unless a mode says
+    /// which it means, so a mode that wants it says so with "crowdFightsItself".
+    ///
+    /// The same bug in its other half - the crowd attacking the player instead of the army - is
+    /// a faction-level "playerRelationship", checked above.
+    /// </summary>
+    private static void CheckCrowdCohesion(string id, JsonValue mode, List<string> factionIds)
+    {
+        var crowd = new List<string>();
+
+        foreach (var entry in mode["factions"].Members)
+        {
+            string recruits = entry.Value["recruits"].AsString("none");
+            if (!string.Equals(recruits, "none", StringComparison.OrdinalIgnoreCase)) { crowd.Add(entry.Key); }
+        }
+
+        bool deliberate = mode["crowdFightsItself"].AsBool(false);
+
+        foreach (JsonValue relation in mode["relations"].Items)
+        {
+            string from = relation["from"].AsString("");
+            string to = relation["to"].AsString("");
+
+            if (!crowd.Contains(from) || !crowd.Contains(to)) { continue; }
+            if (RelationValue(relation["value"].AsString("hate")) < 4) { continue; }
+
+            Check(id + ": crowd factions '" + from + "' and '" + to + "' fight each other", deliberate,
+                  "both are recruited from the ambient crowd - add \"crowdFightsItself\": true if that is the intent");
+        }
+    }
+
+    private static int RelationValue(string text)
+    {
+        int index = Array.IndexOf(ValidRelations, text);
+        return index >= 0 ? index : 5;
     }
 
     /// <summary>Pulls the verbatim string constants back out of StockModes.cs.</summary>

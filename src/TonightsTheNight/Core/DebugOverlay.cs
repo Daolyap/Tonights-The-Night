@@ -37,7 +37,7 @@ namespace TonightsTheNight.Core
                 {
                     sb.AppendLine("phase: " + director.Escalation.Current + " " + director.Escalation.CurrentName +
                                   "   kills: " + director.Kills + "   fires: " + director.Ambience.ActiveFires +
-                                  (director.Purge.Active ? "   ~r~PURGE~s~" : ""));
+                                  (director.Purge.Active ? "   ~r~PURGE " + director.Purge.Remaining + "~s~" : ""));
                 }
                 sb.AppendLine("active: " + director.TrackedCount + "   recruited: " + director.RecruitedTotal +
                               "   lost: " + director.LostTotal + "   culled: " + director.CulledTotal);

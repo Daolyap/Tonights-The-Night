@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TonightsTheNight.Util;
 
@@ -31,6 +32,24 @@ namespace TonightsTheNight.Factions
 
         public int Occupants { get; private set; }
 
+        /// <summary>
+        /// Vehicles in one wave. Two trucks of six is a deployment; one car of two is a patrol,
+        /// and the difference between those is most of whether the army reads as taking control.
+        /// </summary>
+        public int VehiclesPerWave { get; private set; }
+
+        /// <summary>"land", "air" or "water". Air and water need their own spawn points.</summary>
+        public string VehicleType { get; private set; }
+
+        /// <summary>Metres above the anchor for air arrivals.</summary>
+        public float FlightHeight { get; private set; }
+
+        /// <summary>
+        /// Whether a failed vehicle spawn falls back to arriving on foot. Off for boats, which
+        /// would otherwise turn a coastal patrol into more infantry every time you riot inland.
+        /// </summary>
+        public bool FootFallback { get; private set; }
+
         /// <summary>Lights and audio on. What makes police read as police rather than as gunmen.</summary>
         public bool Siren { get; private set; }
 
@@ -54,6 +73,11 @@ namespace TonightsTheNight.Factions
                 MaxDistance = node["maxDistance"].AsFloat(150f),
                 InVehicleChance = node["inVehicleChance"].AsFloat(0f),
                 Occupants = node["occupants"].AsInt(2),
+                VehiclesPerWave = Math.Max(1, node["vehiclesPerWave"].AsInt(1)),
+                VehicleType = node["vehicleType"].AsString("land"),
+                FlightHeight = node["flightHeight"].AsFloat(45f),
+                FootFallback = node["footFallback"].AsBool(
+                    !string.Equals(node["vehicleType"].AsString("land"), "water", StringComparison.OrdinalIgnoreCase)),
                 Siren = node["siren"].AsBool(false),
                 DriveThroughCrowds = node["driveThroughCrowds"].AsBool(false)
             };
@@ -65,7 +89,11 @@ namespace TonightsTheNight.Factions
             {
                 Enabled = false,
                 Models = new List<string>(),
-                Vehicles = new List<string>()
+                Vehicles = new List<string>(),
+                VehiclesPerWave = 1,
+                VehicleType = "land",
+                FlightHeight = 45f,
+                FootFallback = true
             };
         }
     }

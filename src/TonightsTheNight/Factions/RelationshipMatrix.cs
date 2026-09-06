@@ -39,6 +39,32 @@ namespace TonightsTheNight.Factions
         /// <summary>Hash of the vanilla PLAYER group — what factions point their hostility at.</summary>
         public int PlayerGroup { get { return unchecked((int)Game.GenerateHash(VanillaPlayerGroup)); } }
 
+        /// <summary>
+        /// "hate", "neutral", a raw 0-5, or -1 for "not specified" so a faction can decline to
+        /// override its mode. Unknown text is hate, because a relation someone bothered to write
+        /// is far more likely to mean hostility than to mean nothing.
+        /// </summary>
+        public static int Parse(string text, int fallback)
+        {
+            string trimmed = (text ?? string.Empty).Trim().ToLowerInvariant();
+            if (trimmed.Length == 0) { return fallback; }
+
+            switch (trimmed)
+            {
+                case "companion": return Companion;
+                case "respect": return Respect;
+                case "like": return Like;
+                case "neutral": return Neutral;
+                case "dislike": return Dislike;
+                case "hate": return Hate;
+                default:
+                    int numeric;
+                    if (int.TryParse(trimmed, out numeric) && numeric >= 0 && numeric <= 5) { return numeric; }
+                    Log.Warn("Unknown relationship '" + text + "', treating as hate.");
+                    return Hate;
+            }
+        }
+
         public int Register(string name)
         {
             int existing;

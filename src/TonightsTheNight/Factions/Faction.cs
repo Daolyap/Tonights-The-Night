@@ -78,6 +78,22 @@ namespace TonightsTheNight.Factions
         public int Accuracy { get; private set; }
 
         /// <summary>
+        /// How this faction regards the player, or -1 for "whatever the mode says".
+        ///
+        /// This is the setting that makes Martial Law work. One mode-wide answer meant the army
+        /// hating you and the civilians hating you too, so the crowd you were meant to be
+        /// running alongside spent the riot punching you instead of the soldiers.
+        /// </summary>
+        public int PlayerRelationship { get; private set; }
+
+        /// <summary>
+        /// "default" or "random" clothing for spawned peds. Spawning without setting either
+        /// leaves the ped on component 0 of every slot, which for some models is an untextured
+        /// black figure and for others is half an outfit.
+        /// </summary>
+        public string Outfit { get; private set; }
+
+        /// <summary>
         /// Which ambient peds get recruited: "civilian", "male", "female", "any", or "none".
         /// Conversion is how we get scale without paying to spawn it.
         /// </summary>
@@ -103,6 +119,8 @@ namespace TonightsTheNight.Factions
                 Spawn = node.Has("spawn") ? SpawnProfile.FromJson(node["spawn"]) : SpawnProfile.Disabled(),
                 FromPhase = node["fromPhase"].AsInt(0),
                 Accuracy = node["accuracy"].AsInt(-1),
+                PlayerRelationship = RelationshipMatrix.Parse(node["playerRelationship"].AsString(null), -1),
+                Outfit = node["outfit"].AsString("default"),
                 Recruits = node["recruits"].AsString("none"),
                 TakesWeaponPreset = node["weaponPreset"].AsBool(
                     !string.Equals(node["recruits"].AsString("none"), "none", StringComparison.OrdinalIgnoreCase)),

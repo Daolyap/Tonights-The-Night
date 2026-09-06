@@ -45,6 +45,12 @@ namespace TonightsTheNight.Core
         /// <summary>Prop this ped is carrying while looting, if any.</summary>
         public Prop Loot;
 
+        /// <summary>
+        /// What this ped decided to do about being behind a wheel. Rolled once and kept, so a
+        /// driver who set off after you does not change their mind on the next retask.
+        /// </summary>
+        public VehicleRole VehicleRole;
+
         public bool IsUsable
         {
             get { return Ped != null && Ped.Exists() && !Ped.IsDead; }

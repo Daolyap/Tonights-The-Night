@@ -21,6 +21,7 @@ namespace TonightsTheNight.Core
         private readonly ConfigStore _config;
         private readonly RelationshipMatrix _relationships;
         private readonly Random _random;
+        private readonly VehicleTasking _vehicles;
 
         /// <summary>Weapon-name lookups are cached because a miss costs a hash and a log line.</summary>
         private readonly Dictionary<string, uint> _weaponCache = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
@@ -32,9 +33,11 @@ namespace TonightsTheNight.Core
             _config = config;
             _relationships = relationships;
             _random = random;
+            _vehicles = new VehicleTasking(config, random);
         }
 
-        public void Apply(Ped ped, Faction faction, Reaction reaction, Ped threat = null)
+        public void Apply(Ped ped, Faction faction, Reaction reaction, Ped threat = null,
+                          TrackedPed entry = null, Ped hostile = null)
         {
             _relationships.ApplyToPed(ped, faction.GroupHash);
 
@@ -64,7 +67,7 @@ namespace TonightsTheNight.Core
                 Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.AlwaysFight, false);
             }
 
-            IssueTask(ped, faction, reaction, threat);
+            IssueTask(ped, faction, reaction, threat, entry, hostile);
         }
 
         private void ApplyCombatConditioning(Ped ped)
@@ -181,10 +184,17 @@ namespace TonightsTheNight.Core
             return hash;
         }
 
-        public void IssueTask(Ped ped, Faction faction, Reaction reaction, Ped threat = null)
+        /// <summary>
+        /// Tasks one ped. <paramref name="entry"/> is optional and only needed for peds in
+        /// vehicles, whose decision has to be remembered rather than re-rolled.
+        /// </summary>
+        public void IssueTask(Ped ped, Faction faction, Reaction reaction, Ped threat = null,
+                              TrackedPed entry = null, Ped hostile = null)
         {
             try
             {
+                if (TaskAsDriver(ped, reaction, entry, hostile)) { return; }
+
                 switch (reaction)
                 {
                     case Reaction.Fight:
@@ -217,6 +227,55 @@ namespace TonightsTheNight.Core
             {
                 Log.Error("Could not task a " + faction.Id + " ped", ex);
             }
+        }
+
+        /// <summary>
+        /// A ped already at a wheel when the riot reaches them. Returns true when they have been
+        /// given a driving task, so the caller skips the on-foot one.
+        ///
+        /// Passengers get handled here too: the driver is the one who decides where the car goes,
+        /// so everyone else in it is tasked off the back of that decision.
+        /// </summary>
+        private bool TaskAsDriver(Ped ped, Reaction reaction, TrackedPed entry, Ped hostile)
+        {
+            if (entry == null || !_vehicles.Enabled) { return false; }
+            if (reaction != Reaction.Fight && reaction != Reaction.Flee) { return false; }
+
+            Vehicle vehicle = ped.CurrentVehicle;
+            if (vehicle == null || !vehicle.Exists()) { return false; }
+
+            // A wreck is not a vehicle. Whoever is still sitting in one gets their permission to
+            // get out back, then carries on as an ordinary rioter.
+            if (!Function.Call<bool>(Hash.IS_VEHICLE_DRIVEABLE, vehicle, false))
+            {
+                VehicleTasking.Release(ped);
+                entry.VehicleRole = VehicleRole.None;
+                return false;
+            }
+
+            // Passengers are tasked by whoever is driving, not on their own account.
+            if (vehicle.Driver == null || vehicle.Driver.Handle != ped.Handle) { return false; }
+
+            if (entry.VehicleRole == VehicleRole.None)
+            {
+                entry.VehicleRole = _vehicles.Roll(reaction);
+            }
+
+            if (!_vehicles.Apply(ped, vehicle, entry.VehicleRole, hostile)) { return false; }
+
+            Ped target = entry.VehicleRole == VehicleRole.HuntEnemy && hostile != null && hostile.Exists()
+                ? hostile
+                : Game.Player.Character;
+
+            foreach (Ped occupant in vehicle.Occupants)
+            {
+                if (occupant == null || !occupant.Exists() || occupant.Handle == ped.Handle) { continue; }
+                if (occupant.Handle == Game.Player.Character.Handle) { continue; }
+
+                _vehicles.TaskPassenger(occupant, target);
+            }
+
+            return true;
         }
     }
 }

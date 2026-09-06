@@ -1,5 +1,92 @@
 # Changelog
 
+## v0.4.0 — the crowd picks the right enemy
+
+Your diagnosis was right and it was one design mistake, not several: **a mode had one answer for
+how the whole riot regarded you.** So in Martial Law the army hated you and the civilians hated
+you too, and the crowd you were meant to be running alongside spent the riot punching you
+instead of the soldiers shooting at them.
+
+### Fixed — who fights whom
+
+**Player standing is now per faction.** Each faction says how it regards you; the mode is only
+the fallback. In Police State, Martial Law, Invasion and Animal Uprising the civilians are now
+neutral to you and hostile only to whatever is attacking them. The armed side still wants you.
+
+**Civilians are one crowd, not two mobs.** Nothing in those modes makes pedestrians hostile to
+each other any more, so they unite. Some run, some fight back — fight-back is up from 20-30% to
+45-55%.
+
+**The menu default changed** from "Target" to "Mode's Own". The three forcing options are still
+there, but they force one answer on everybody, including the people you would otherwise be
+running with.
+
+**A build check now catches this class of bug.** Two factions both recruited from the ambient
+crowd may not hate each other unless the mode explicitly declares `crowdFightsItself` — which
+Pedestrian Riot, Pedestrian Chaos and The Purge do, because there it is the point.
+
+### Fixed — rioters in cars
+
+**Driving past at speed no longer produces a street of abandoned cars.** Every driver was being
+given "fight the nearest enemy", which makes a ped stop in the road and get out — so all of them
+made the identical decision, which reads as a scripted trap rather than a city coming apart.
+
+A driver now rolls once for what they do, and keeps that decision:
+
+| | Default weight |
+|---|---|
+| Stop, get out and fight | 3 |
+| Chase another rioter | 3 |
+| Come after you | 2 |
+| Drive away from you | 2 |
+
+Drivers and passengers shoot from the windows if they have something to shoot with. All four
+weights are sliders under **Rioters Driving**.
+
+### Fixed — the rest of the list
+
+**The clock is never touched.** `setTime` and the purge's `setClock` both default off.
+
+**No weather or colour grading.** The shipped modes no longer ask for any, and the whole ambience
+feature is off by default. The switches remain if you want the look back.
+
+**Never wanted during the purge.** It lowers your wanted *ceiling* for the window rather than
+clearing stars, and puts back exactly what it was — so a six-star overhaul gets its six back the
+moment the purge ends, and is untouched outside the window.
+
+**The purge ends.** Its remaining time was frozen at the starting value, so every display of it
+was a stopped clock. It now counts down, logs a line a minute, shows on the debug overlay, and
+the mode's phases end inside the window instead of running past it.
+
+**The alien invasion looked like a man in black.** A ped created without a component variation
+keeps component 0 in every slot, which for some models is half an outfit and for others an
+untextured black figure. Every spawned ped now gets its default outfit.
+
+### Added — Pedestrian Chaos
+
+A free-for-all. Everyone kills everyone, police included, and you are in it. The only people on
+your side are the ones sharing your car — that still works, because recruits inherit the faction
+of whoever they are riding with.
+
+### Added — Martial Law actually takes control
+
+Police from the start (they are the ones who call the army in), then infantry, then armour, then
+helicopters holding station overhead, and coastal patrol boats where there is water to put them
+on. Troop carriers arrive carrying troops: two vehicles a wave, six to a truck, every nine
+seconds, up to thirty-two infantry on the street.
+
+Police State got the same treatment — two cars of four every eight seconds, riot vans of six,
+and a police helicopter in the final phase.
+
+### Changed — spawn rates
+
+Roughly doubled across every mode. Waves are bigger, more frequent, and can now be several
+vehicles at once. Spawning also respects the global ped ceiling, which it did not before — with
+five spawning factions in Martial Law their individual caps add up to well past the engine
+budget, and nothing was stopping them.
+
+---
+
 ## v0.3.0 — chases, looting, weapon presets
 
 The three things from the original vision that were still only a plan.

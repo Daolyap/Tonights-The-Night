@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.3.0";
+        public const string Version = "0.4.0";
 
         public static JsonValue Build()
         {
@@ -111,6 +111,37 @@ namespace TonightsTheNight.Config
             weapons.Set("customAmmo", JsonValue.Of(120));
             root.Set("weapons", weapons);
 
+            // What a rioter already behind a wheel does about it.
+            //
+            // These weights exist because the obvious answer is wrong: tasking every driver to
+            // fight made all of them stop in the road and get out, so driving past a riot gave
+            // you a street of abandoned cars and people walking at you - every driver making the
+            // identical decision, which reads as a scripted trap rather than as a city coming
+            // apart. Rebalance freely; only the mix matters, not the totals.
+            JsonValue vehicles = JsonValue.NewObject();
+            vehicles.Set("enabled", JsonValue.Of(true));
+            vehicles.Set("dismountWeight", JsonValue.Of(3));      // stop, get out, fight
+            vehicles.Set("huntEnemyWeight", JsonValue.Of(3));     // go after another rioter
+            vehicles.Set("huntPlayerWeight", JsonValue.Of(2));    // come after you
+            vehicles.Set("fleePlayerWeight", JsonValue.Of(2));    // get away from you
+            vehicles.Set("driveBys", JsonValue.Of(true));
+            vehicles.Set("driveByRange", JsonValue.Of(60));
+            vehicles.Set("driveByAccuracy", JsonValue.Of(35));
+            vehicles.Set("driveThroughCrowds", JsonValue.Of(true));
+            vehicles.Set("ram", JsonValue.Of(false));
+            // Community-documented native values, so they are here rather than compiled in.
+            vehicles.Set("ramMission", JsonValue.Of(6));
+            vehicles.Set("fleeMission", JsonValue.Of(8));
+            // Flags for IS_PED_ARMED. If nobody shoots from a car, or the man with the golf
+            // club does, this is the value to change.
+            vehicles.Set("armedCheckFlags", JsonValue.Of(4));
+            vehicles.Set("chaseSpeed", JsonValue.Of(55));
+            vehicles.Set("fleeSpeed", JsonValue.Of(45));
+            vehicles.Set("aggressiveness", JsonValue.Of(0.9));
+            vehicles.Set("driverAbility", JsonValue.Of(0.8));
+            vehicles.Set("drivingStyle", JsonValue.Of(786603));
+            root.Set("vehicles", vehicles);
+
             JsonValue blips = JsonValue.NewObject();
             blips.Set("enabled", JsonValue.Of(true));
             blips.Set("maxBlips", JsonValue.Of(40));
@@ -121,9 +152,10 @@ namespace TonightsTheNight.Config
 
             JsonValue player = JsonValue.NewObject();
             player.Set("side", JsonValue.Of("neutral"));       // neutral | <faction id>
-            // ignored | disliked | target | mode. Default target: during a riot, being just
-            // another person on the street is the point. Set "ignored" to watch undisturbed.
-            player.Set("stance", JsonValue.Of("target"));
+            // mode | ignored | disliked | target. "mode" lets each faction answer for itself,
+            // which is the only way Martial Law works: the army should want you and the crowd
+            // being shot at should not. The other three force one answer on every faction.
+            player.Set("stance", JsonValue.Of("mode"));
             root.Set("player", player);
 
             // Where the riot is. Confining it is both the cheapest performance control and the
@@ -170,10 +202,14 @@ namespace TonightsTheNight.Config
             escalation.Set("enabled", JsonValue.Of(true));
             features.Set("escalation", escalation);
 
+            // Off by default, and the shipped modes no longer ask for any of it. A riot mod
+            // that changes your weather and time of day is a mod that has taken over the
+            // screen; if you want the look, these are here and each mode can declare its own.
             JsonValue ambience = JsonValue.NewObject();
-            ambience.Set("enabled", JsonValue.Of(true));
+            ambience.Set("enabled", JsonValue.Of(false));
             ambience.Set("setWeather", JsonValue.Of(true));
-            ambience.Set("setTime", JsonValue.Of(true));
+            // Even with ambience on, the clock is left alone unless you ask.
+            ambience.Set("setTime", JsonValue.Of(false));
             ambience.Set("setTimecycle", JsonValue.Of(true));
             features.Set("ambience", ambience);
 
@@ -190,7 +226,11 @@ namespace TonightsTheNight.Config
             purge.Set("enabled", JsonValue.Of(true));
             purge.Set("startHour", JsonValue.Of(22));
             purge.Set("durationMinutes", JsonValue.Of(12));
-            purge.Set("setClock", JsonValue.Of(true));
+            purge.Set("setClock", JsonValue.Of(false));
+            // All crime is legal, so the game's own police should not be interested. Lowers the
+            // wanted ceiling for the window and puts back whatever it was - a six-star overhaul
+            // gets its six back the moment the purge ends.
+            purge.Set("noWantedLevel", JsonValue.Of(true));
             features.Set("purge", purge);
 
             // Driving behaviour for police and military. The mission type and driving style are
@@ -206,6 +246,16 @@ namespace TonightsTheNight.Config
             police.Set("targetReachedDistance", JsonValue.Of(5));
             police.Set("straightLineDistance", JsonValue.Of(8));
             features.Set("police", police);
+
+            // Helicopters. TASK_HELI_MISSION is community-documented rather than official, so
+            // if air support parks on a rooftop instead of holding station, these are the knobs.
+            JsonValue air = JsonValue.NewObject();
+            air.Set("heliMission", JsonValue.Of(4));
+            air.Set("speed", JsonValue.Of(40));
+            air.Set("radius", JsonValue.Of(60));
+            air.Set("maxHeight", JsonValue.Of(90));
+            air.Set("minHeight", JsonValue.Of(35));
+            features.Set("air", air);
 
             // Car chases. Provocation-driven: hurt someone and drive away, and their side
             // comes after you in a carload. Never touches the wanted system, so this can run

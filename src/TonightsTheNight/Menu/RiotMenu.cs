@@ -32,6 +32,7 @@ namespace TonightsTheNight.Menu
         private NativeMenu _featuresMenu;
         private NativeMenu _zoneMenu;
         private NativeMenu _weaponMenu;
+        private NativeMenu _drivingMenu;
         private NativeMenu _pursuitMenu;
         private NativeMenu _lootMenu;
         private NativeMenu _profileMenu;
@@ -68,6 +69,7 @@ namespace TonightsTheNight.Menu
             BuildTuningMenu();
             BuildWeaponMenu();
             BuildZoneMenu();
+            BuildDrivingMenu();
             BuildPursuitMenu();
             BuildLootMenu();
             BuildFeaturesMenu();
@@ -76,7 +78,7 @@ namespace TonightsTheNight.Menu
             _phaseItem = new NativeItem("Skip To Next Phase", "Force the riot to escalate now instead of waiting.");
             _phaseItem.Activated += (sender, args) =>
             {
-                if (!_director.Escalation.Advance())
+                if (!_director.SkipPhase())
                 {
                     GTA.UI.Notification.Show("~o~Already at the final phase.");
                 }
@@ -241,6 +243,41 @@ namespace TonightsTheNight.Menu
         }
 
         /// <summary>
+        /// What rioters already behind a wheel do about it. Weights rather than a switch,
+        /// because the bug being fixed here was every driver making the identical decision.
+        /// </summary>
+        private void BuildDrivingMenu()
+        {
+            _drivingMenu = new NativeMenu("Tonight's The Night", "RIOTERS DRIVING");
+            _pool.Add(_drivingMenu);
+            AddSubMenu(_drivingMenu, "Rioters Driving", "What someone already in a car does when the riot reaches them.");
+
+            AddToggle(_drivingMenu, "Rioters Drive", "vehicles.enabled", true,
+                "Off: every driver stops and gets out, which is what a street of abandoned cars looks like.");
+
+            AddRangeSlider(_drivingMenu, "Get Out And Fight", "vehicles.dismountWeight", 3, 0, 10, 1,
+                "Relative weight. Stop the car, get out, join in on foot.");
+
+            AddRangeSlider(_drivingMenu, "Chase Another Rioter", "vehicles.huntEnemyWeight", 3, 0, 10, 1,
+                "Relative weight. Go after someone their side hates.");
+
+            AddRangeSlider(_drivingMenu, "Chase You", "vehicles.huntPlayerWeight", 2, 0, 10, 1,
+                "Relative weight. Come after you specifically.");
+
+            AddRangeSlider(_drivingMenu, "Drive Away From You", "vehicles.fleePlayerWeight", 2, 0, 10, 1,
+                "Relative weight. Get out of your way and keep going.");
+
+            AddToggle(_drivingMenu, "Shoot From Cars", "vehicles.driveBys", true,
+                "Drivers and passengers lean out, if they have something to lean out with.");
+
+            AddToggle(_drivingMenu, "Drive Through Crowds", "vehicles.driveThroughCrowds", true,
+                "Rioter drivers stop steering around people.");
+
+            AddToggle(_drivingMenu, "Ram Instead Of Chase", "vehicles.ram", false,
+                "On: drivers going after someone drive into them rather than following.");
+        }
+
+        /// <summary>
         /// Car chases. The trigger is provocation, not proximity, so these settings are mostly
         /// about how long a grudge lasts and how hard it is to shake.
         /// </summary>
@@ -390,11 +427,16 @@ namespace TonightsTheNight.Menu
             AddRangeSlider(_featuresMenu, "Max Fires", "features.fires.maxActive", 8, 0, 24, 2,
                 "How many fires can burn at once.");
 
-            AddToggle(_featuresMenu, "Weather And Lighting", "features.ambience.enabled", true,
-                "Let a mode set the weather, time of day and colour grade.");
+            AddToggle(_featuresMenu, "Weather And Lighting", "features.ambience.enabled", false,
+                "Off by default. On, a mode may change your weather and colour grade. Your clock is " +
+                "left alone either way unless you turn on features.ambience.setTime.");
 
             AddToggle(_featuresMenu, "Purge Timer", "features.purge.enabled", true,
-                "The countdown and curfew in Purge mode. Off makes it run indefinitely.");
+                "The countdown in Purge mode. Off makes it run indefinitely.");
+
+            AddToggle(_featuresMenu, "No Wanted Level During Purge", "features.purge.noWantedLevel", true,
+                "All crime is legal, so the game's own police lose interest. Your wanted ceiling is " +
+                "put back exactly as it was when the purge ends.");
 
             AddToggle(_featuresMenu, "Spawn Factions", "riot.spawnFactions", true,
                 "Off: only ambient pedestrians are used. No police, military, aliens or animals.");
@@ -424,14 +466,15 @@ namespace TonightsTheNight.Menu
         /// </summary>
         private void AddStancePicker(NativeMenu menu)
         {
-            string[] labels = { "Ignored", "Disliked", "Target" };
-            string[] values = { "ignored", "disliked", "target" };
+            string[] labels = { "Mode's Own", "Ignored", "Disliked", "Target" };
+            string[] values = { "mode", "ignored", "disliked", "target" };
 
             var item = new NativeListItem<string>("They Treat You As",
-                "Ignored: walk through it untouched. Disliked: they react if you get close. Target: fair game.",
+                "Mode's Own: the army wants you, the crowd it is shooting at does not. The other three " +
+                "force one answer on everybody - including the people you would otherwise be running with.",
                 labels);
 
-            item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("player.stance", "target")));
+            item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("player.stance", "mode")));
             item.ItemChanged += (sender, args) =>
             {
                 _config.SetLive("player.stance", JsonValue.Of(values[item.SelectedIndex]));
@@ -440,7 +483,7 @@ namespace TonightsTheNight.Menu
 
             menu.Add(item);
             _refreshers.Add(() =>
-                item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("player.stance", "target"))));
+                item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("player.stance", "mode"))));
         }
 
         private void AddToggle(NativeMenu menu, string title, string path, bool fallback, string description)

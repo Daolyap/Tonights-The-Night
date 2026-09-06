@@ -52,6 +52,13 @@ namespace TonightsTheNight.Core
         /// <summary>Factions repeated by share, so round-robin over it honours the weights.</summary>
         private readonly List<Faction> _recruitPool = new List<Faction>();
 
+        /// <summary>
+        /// Faction pairs that dislike or hate each other, as "a|b". Needed because "drive after
+        /// an enemy" has to pick a real enemy: a different faction is not the same as a hostile
+        /// one, and sending a rioter to ram their own allies reads as broken.
+        /// </summary>
+        private readonly HashSet<string> _hostilePairs = new HashSet<string>(StringComparer.Ordinal);
+
         /// <summary>Peds being calmed down after a stop, and the deadline for doing so.</summary>
         private readonly List<Ped> _pacifying = new List<Ped>();
         private int _pacifyUntil;
@@ -111,10 +118,13 @@ namespace TonightsTheNight.Core
             }
 
             ApplyRelations(mode);
+            BuildHostility(mode);
             ApplyPlayerSide(mode);
-            BuildRecruitPool(mode);
 
+            // Before the pool, because the pool asks the escalation which factions are allowed
+            // yet - and asking an unloaded escalation got the previous mode's answer.
             Escalation.Load(mode.Escalation);
+            BuildRecruitPool(mode);
             Zone.Begin();
             Ambience.Apply(mode.Ambience);
             Purge.Begin(mode.Purge);
@@ -180,6 +190,9 @@ namespace TonightsTheNight.Core
                 _registry.RestoreAll();
                 Ambience.Clear();
                 Zone.Clear();
+                // Leaves the wanted ceiling at zero for the rest of the session if skipped,
+                // which would look exactly like the police mod having broken.
+                Purge.Clear();
                 _models.Release();
                 _relationships.Clear();
                 ActiveMode = null;
@@ -206,7 +219,12 @@ namespace TonightsTheNight.Core
                 // stutter between values.
                 ApplyDensity();
 
-                if (Escalation.Update(Kills)) { AnnouncePhase(); }
+                if (Escalation.Update(Kills))
+                {
+                    // A faction that joins at this phase can now be recruited into.
+                    BuildRecruitPool(ActiveMode);
+                    AnnouncePhase();
+                }
 
                 if (Purge.Update())
                 {
@@ -324,7 +342,7 @@ namespace TonightsTheNight.Core
 
                 Reaction reaction = faction.ResolveReaction(_random);
                 TrackedPed entry = _registry.Add(ped, faction, reaction, false);
-                _conditioner.Apply(ped, faction, reaction, _lastFighter);
+                _conditioner.Apply(ped, faction, reaction, _lastFighter, entry, HostileFor(entry));
                 entry.LastTaskedAt = Game.GameTime;
 
                 // Recruits come from one sweep around the player, so the last fighter we made
@@ -348,6 +366,11 @@ namespace TonightsTheNight.Core
         {
             if (!_config.GetBool("riot.spawnFactions", true)) { return; }
 
+            // Per-faction caps are not a global cap. With five spawning factions in Martial Law
+            // their ceilings add up to more than the engine budget, and nothing else was
+            // stopping them.
+            if (_registry.Count >= _config.GetInt("engine.maxTrackedPeds", 120)) { return; }
+
             _spawner.NoteAliveCounts(_registry.Tracked);
 
             foreach (Faction faction in ActiveMode.Factions)
@@ -364,7 +387,7 @@ namespace TonightsTheNight.Core
                 {
                     Reaction reaction = faction.ResolveReaction(_random);
                     TrackedPed entry = _registry.Add(ped, faction, reaction, true);
-                    _conditioner.Apply(ped, faction, reaction, _lastFighter);
+                    _conditioner.Apply(ped, faction, reaction, _lastFighter, entry, HostileFor(entry));
                     entry.LastTaskedAt = Game.GameTime;
 
                     AttachBlip(entry);
@@ -373,12 +396,27 @@ namespace TonightsTheNight.Core
                     if (vehicle != null && vehicle.Exists() && vehicle.Driver == ped)
                     {
                         _vehicles.Apply(ped, vehicle, faction, target);
+                        _vehicles.ApplyOccupants(vehicle, ped, target);
                     }
                 }
 
                 RecruitedTotal += wave.Count;
                 Log.Debug("Spawned " + wave.Count + " for faction '" + faction.Id + "'.");
             }
+        }
+
+        /// <summary>
+        /// Menu-driven skip. Goes through here rather than straight to the Escalation so the
+        /// recruit pool is rebuilt, which is what lets a faction that joins at this phase
+        /// actually start being recruited.
+        /// </summary>
+        public bool SkipPhase()
+        {
+            if (!IsRunning || !Escalation.Advance()) { return false; }
+
+            BuildRecruitPool(ActiveMode);
+            AnnouncePhase();
+            return true;
         }
 
         private void AnnouncePhase()
@@ -456,6 +494,66 @@ namespace TonightsTheNight.Core
                 TrackedPed mate = _registry.Find(occupant);
                 if (mate != null) { return mate.Faction; }
             }
+            return null;
+        }
+
+        /// <summary>
+        /// Indexes the mode's own relations. Only dislike and hate count: allies and neutrals
+        /// are not targets, however different their faction.
+        /// </summary>
+        private void BuildHostility(RiotMode mode)
+        {
+            _hostilePairs.Clear();
+
+            foreach (Relation relation in mode.Relations)
+            {
+                if (relation.Value < RelationshipMatrix.Dislike) { continue; }
+
+                _hostilePairs.Add(relation.From + "|" + relation.To);
+                if (relation.Mutual) { _hostilePairs.Add(relation.To + "|" + relation.From); }
+            }
+        }
+
+        private bool AreHostile(Faction from, Faction to)
+        {
+            // A faction declared hostile to itself is a free-for-all, which is a legitimate
+            // thing for a mode to want.
+            return _hostilePairs.Contains(from.Id + "|" + to.Id);
+        }
+
+        /// <summary>
+        /// Only drivers need something to chase, and they are a small minority. One native beats
+        /// a list walk for everyone else.
+        /// </summary>
+        private Ped HostileFor(TrackedPed entry)
+        {
+            if (!entry.IsUsable || !entry.Ped.IsInVehicle()) { return null; }
+            return PickHostile(entry);
+        }
+
+        /// <summary>
+        /// Someone for this ped to go after. Scans a bounded window of the tracked list rather
+        /// than all of it — this runs for drivers only, and an approximate enemy nearby beats an
+        /// exact one across the map.
+        /// </summary>
+        private Ped PickHostile(TrackedPed entry)
+        {
+            IReadOnlyList<TrackedPed> tracked = _registry.Tracked;
+            if (tracked.Count == 0 || _hostilePairs.Count == 0) { return null; }
+
+            int start = _random.Next(tracked.Count);
+            int window = Math.Min(tracked.Count, 24);
+
+            for (int offset = 0; offset < window; offset++)
+            {
+                TrackedPed other = tracked[(start + offset) % tracked.Count];
+
+                if (other == entry || !other.IsUsable) { continue; }
+                if (!AreHostile(entry.Faction, other.Faction)) { continue; }
+
+                return other.Ped;
+            }
+
             return null;
         }
 
@@ -569,7 +667,7 @@ namespace TonightsTheNight.Core
 
                 if (ShouldRetask(entry, retaskAfterMs))
                 {
-                    _conditioner.IssueTask(entry.Ped, entry.Faction, entry.Reaction, _lastFighter);
+                    _conditioner.IssueTask(entry.Ped, entry.Faction, entry.Reaction, _lastFighter, entry, HostileFor(entry));
                     // Jittered so a crowd does not retask in lockstep every few seconds.
                     entry.LastTaskedAt = Game.GameTime + _random.Next(0, 1500);
                 }
@@ -780,32 +878,46 @@ namespace TonightsTheNight.Core
                 _playerMovedGroup = false;
             }
 
-            int stance = ParseStance(_config.GetString("player.stance", "target"), mode.PlayerRelationship);
+            // A forced stance from the menu overrides everything; "mode" (the default) lets each
+            // faction answer for itself and falls back to the mode's own setting.
+            int forced = ParseStance(_config.GetString("player.stance", "mode"), -1);
+
             foreach (Faction faction in mode.Factions)
             {
+                int stance = forced >= 0 ? forced
+                    : (faction.PlayerRelationship >= 0 ? faction.PlayerRelationship : mode.PlayerRelationship);
+
                 _relationships.Set(faction.GroupHash, _relationships.PlayerGroup, stance);
                 _relationships.Set(_relationships.PlayerGroup, faction.GroupHash, RelationshipMatrix.Neutral);
+
+                Log.Debug("Faction '" + faction.Id + "' regards the player as " + stance + " (0 companion .. 5 hate).");
             }
 
-            Log.Info("Player stance: " + stance + " (0 companion .. 5 hate), vanilla PLAYER group kept.");
+            Log.Info("Player stance: " + (forced >= 0 ? forced.ToString() : "per faction") +
+                     ", vanilla PLAYER group kept.");
         }
 
         /// <summary>
-        /// How the factions regard the player. "target" is the default because during a riot -
-        /// a purge especially - being just another person on the street is the point; standing
-        /// in the middle of it untouched reads as a bug, not as neutrality.
+        /// How the factions regard the player, forced across every faction. Returns
+        /// <paramref name="unforced"/> for "mode", which is the default and means each faction
+        /// answers for itself.
+        ///
+        /// "mode" is the default rather than "target" because one answer for the whole riot is
+        /// wrong for half the modes: in Martial Law the soldiers should want you and the crowd
+        /// should not, and a single mode-wide "target" had civilians spending the riot punching
+        /// you instead of the army that was shooting at them.
         /// </summary>
-        private static int ParseStance(string text, int modeDefault)
+        private static int ParseStance(string text, int unforced)
         {
             switch ((text ?? string.Empty).Trim().ToLowerInvariant())
             {
                 case "ignored": return RelationshipMatrix.Neutral;
                 case "disliked": return RelationshipMatrix.Dislike;
                 case "target": return RelationshipMatrix.Hate;
-                case "mode": return modeDefault;
+                case "mode": return unforced;
                 default:
-                    Log.Warn("Unknown player stance '" + text + "', using the mode's own setting.");
-                    return modeDefault;
+                    Log.Warn("Unknown player stance '" + text + "', letting each faction decide.");
+                    return unforced;
             }
         }
 

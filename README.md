@@ -6,24 +6,30 @@ Riot modes built from **factions** — who they are, what they carry, who they h
 react when it starts. Modes and factions are JSON files, not code, so a custom faction needs no
 build step. Every optional feature is a switch with its own settings block.
 
-**Status:** v0.3.0 — playable. Eight modes, spawned factions, escalation, zones, fires, car
-chases, looting and weapon presets are in. See [`CHANGELOG.md`](CHANGELOG.md) for what landed
-and [`PLAN.md`](PLAN.md) for the design.
+**Status:** v0.4.0 — playable. Nine modes, spawned factions, escalation, zones, car chases,
+looting and weapon presets are in. See [`CHANGELOG.md`](CHANGELOG.md) for what landed and
+[`PLAN.md`](PLAN.md) for the design.
 
 | Mode | |
 |---|---|
 | Pedestrian Riot | Two mobs form out of the crowd |
+| Pedestrian Chaos | A free-for-all. Only your passengers are on your side |
 | Gang War | Four gangs settle up at once |
-| Police State | Sirens on, driving through crowds |
-| Martial Law | Infantry, then armour |
+| Police State | Sirens on, driving through crowds, helicopters overhead |
+| Martial Law | Police, then infantry, then armour, air and sea |
 | Animal Uprising | Deliberately silly |
 | Invasion | Aliens, with weapons already in your game |
 | The Purge | Twelve minutes, then it stops |
 | Everything | All of it, escalating |
 
 Plus, across all of them: **car chases** (hurt someone, drive off, and a carload of their side
-comes after you), **looting**, **escalation phases**, **riot zones**, **fires and weather**, and
-**weapon presets** — realistic, armed and armoured, military, chaos, or your own list.
+comes after you), **rioters who drive** rather than all stopping and getting out, **looting**,
+**escalation phases**, **riot zones**, **fires**, and **weapon presets** — realistic, armed and
+armoured, military, chaos, or your own list.
+
+It does not change your time of day, weather or colour grading unless you turn that on, and it
+does not touch the wanted system — with one exception you can switch off: during The Purge, all
+crime is legal, so your wanted ceiling drops for the window and is restored exactly as it was.
 
 ## Install
 

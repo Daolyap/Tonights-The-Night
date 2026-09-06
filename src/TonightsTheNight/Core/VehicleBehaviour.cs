@@ -54,6 +54,14 @@ namespace TonightsTheNight.Core
 
                 if (target == null || !target.Exists()) { return; }
 
+                // A helicopter cannot be given a road mission, and giving it one is why air
+                // support previously did nothing at all.
+                if (vehicle.ClassType == VehicleClass.Helicopters)
+                {
+                    ApplyHelicopter(driver, vehicle, target);
+                    return;
+                }
+
                 // Mission type and driving style are community-documented rather than official,
                 // so both are config-exposed: if the ramming reads wrong, it is a config edit
                 // and a reload rather than a new build.
@@ -69,6 +77,60 @@ namespace TonightsTheNight.Core
             catch (Exception ex)
             {
                 Log.Error("Could not apply vehicle behaviour for faction '" + faction.Id + "'", ex);
+            }
+        }
+
+        /// <summary>
+        /// A gunship holding station over the riot.
+        ///
+        /// The mission id and the heights are config-exposed because TASK_HELI_MISSION is
+        /// community-documented rather than official and has more arguments than anyone is
+        /// confident about. If air support ends up parked on a rooftop, this is the knob.
+        /// </summary>
+        private void ApplyHelicopter(Ped pilot, Vehicle vehicle, Ped target)
+        {
+            GTA.Math.Vector3 over = target.Position;
+
+            Function.Call(Hash.TASK_HELI_MISSION,
+                pilot, vehicle, 0, target,
+                over.X, over.Y, over.Z,
+                _config.GetInt("features.air.heliMission", 4),
+                _config.GetFloat("features.air.speed", 40f),
+                _config.GetFloat("features.air.radius", 60f),
+                -1f,
+                (int)_config.GetFloat("features.air.maxHeight", 90f),
+                (int)_config.GetFloat("features.air.minHeight", 35f),
+                -1f, 0);
+        }
+
+        /// <summary>
+        /// Everyone else in the vehicle. A troop carrier whose passengers stare straight ahead
+        /// while the driver ploughs through a crowd is the detail that gives it away.
+        /// </summary>
+        public void ApplyOccupants(Vehicle vehicle, Ped driver, Ped target)
+        {
+            if (vehicle == null || !vehicle.Exists() || target == null || !target.Exists()) { return; }
+            if (!_config.GetBool("vehicles.driveBys", true)) { return; }
+
+            try
+            {
+                foreach (Ped occupant in vehicle.Occupants)
+                {
+                    if (occupant == null || !occupant.Exists()) { continue; }
+                    if (driver != null && occupant.Handle == driver.Handle) { continue; }
+                    if (occupant.Handle == Game.Player.Character.Handle) { continue; }
+
+                    Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, occupant, CombatAttribute.CanDoDrivebys, true);
+                    Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, occupant, CombatAttribute.CanLeaveVehicle, true);
+                    Function.Call(Hash.TASK_DRIVE_BY, occupant, target, 0, 0f, 0f, 0f,
+                        _config.GetFloat("vehicles.driveByRange", 60f),
+                        _config.GetInt("vehicles.driveByAccuracy", 35),
+                        true, 0xC6EE6B4C);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not task vehicle occupants", ex);
             }
         }
     }

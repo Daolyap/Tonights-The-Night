@@ -106,20 +106,7 @@ namespace TonightsTheNight.Factions
 
         private static int ParseRelationship(string text)
         {
-            switch ((text ?? string.Empty).Trim().ToLowerInvariant())
-            {
-                case "companion": return RelationshipMatrix.Companion;
-                case "respect": return RelationshipMatrix.Respect;
-                case "like": return RelationshipMatrix.Like;
-                case "neutral": return RelationshipMatrix.Neutral;
-                case "dislike": return RelationshipMatrix.Dislike;
-                case "hate": return RelationshipMatrix.Hate;
-                default:
-                    int numeric;
-                    if (int.TryParse(text, out numeric) && numeric >= 0 && numeric <= 5) { return numeric; }
-                    Log.Warn("Unknown relationship '" + text + "', treating as hate.");
-                    return RelationshipMatrix.Hate;
-            }
+            return RelationshipMatrix.Parse(text, RelationshipMatrix.Hate);
         }
     }
 }
