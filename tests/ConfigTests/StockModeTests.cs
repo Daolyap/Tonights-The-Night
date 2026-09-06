@@ -75,14 +75,27 @@ public static class StockModeTests
 
                 foreach (JsonValue weapon in faction["weapons"].Items)
                 {
+                    string weaponName;
+
                     if (weapon.IsObject)
                     {
-                        Check(fid + ": weapon entry has a name", weapon["name"].AsString(null) != null);
+                        weaponName = weapon["name"].AsString(null);
+                        Check(fid + ": weapon entry has a name", weaponName != null);
                         Check(fid + ": weapon weight is positive", weapon["weight"].AsDouble(1) > 0);
                     }
                     else
                     {
-                        Check(fid + ": bare weapon entry is a string", weapon.AsString(null) != null);
+                        weaponName = weapon.AsString(null);
+                        Check(fid + ": bare weapon entry is a string", weaponName != null);
+                    }
+
+                    // A wrong weapon name is silent - the faction simply goes out unarmed - so
+                    // shipped content is held to weapons a clean install actually has. Your own
+                    // config may reference an add-on pack; this only covers what we ship.
+                    if (weaponName != null)
+                    {
+                        Check(fid + ": weapon '" + weaponName + "' is a base-game weapon",
+                              VanillaWeapons.IsKnown(weaponName), "not in the vanilla list");
                     }
                 }
 

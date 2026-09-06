@@ -31,6 +31,9 @@ namespace TonightsTheNight.Menu
         private NativeMenu _tuningMenu;
         private NativeMenu _featuresMenu;
         private NativeMenu _zoneMenu;
+        private NativeMenu _weaponMenu;
+        private NativeMenu _pursuitMenu;
+        private NativeMenu _lootMenu;
         private NativeMenu _profileMenu;
         private NativeItem _stopItem;
         private NativeItem _phaseItem;
@@ -63,7 +66,10 @@ namespace TonightsTheNight.Menu
 
             BuildModeMenu();
             BuildTuningMenu();
+            BuildWeaponMenu();
             BuildZoneMenu();
+            BuildPursuitMenu();
+            BuildLootMenu();
             BuildFeaturesMenu();
             BuildProfileMenu();
 
@@ -192,6 +198,106 @@ namespace TonightsTheNight.Menu
 
             AddToggle(_tuningMenu, "Never Flee", "combat.neverFlee", true,
                 "Stops fighters breaking off and running. Turn off for a more realistic crowd.");
+        }
+
+        /// <summary>
+        /// The weapon presets from the original plan, as one picker. A preset is a whole
+        /// answer - weapons, armour and how many people are armed at all - because those are
+        /// the same decision, and splitting them across three sliders would only let you build
+        /// the incoherent middle.
+        /// </summary>
+        private void BuildWeaponMenu()
+        {
+            _weaponMenu = new NativeMenu("Tonight's The Night", "WEAPONS");
+            _pool.Add(_weaponMenu);
+            AddSubMenu(_weaponMenu, "Weapons", "What the crowd is carrying. Presets, or your own list.");
+
+            var picker = new NativeListItem<string>("Preset", WeaponPresets.DescriptionOf(WeaponPresets.UseMode), WeaponPresets.Names);
+            picker.SelectedIndex = Math.Max(0, Array.IndexOf(WeaponPresets.Ids, _config.GetString("weapons.preset", WeaponPresets.UseMode)));
+            picker.Description = WeaponPresets.DescriptionOf(WeaponPresets.Ids[picker.SelectedIndex]);
+
+            picker.ItemChanged += (sender, args) =>
+            {
+                string id = WeaponPresets.Ids[picker.SelectedIndex];
+                _config.SetLive("weapons.preset", JsonValue.Of(id));
+                picker.Description = WeaponPresets.DescriptionOf(id);
+            };
+
+            _weaponMenu.Add(picker);
+            _refreshers.Add(() =>
+            {
+                picker.SelectedIndex = Math.Max(0, Array.IndexOf(WeaponPresets.Ids, _config.GetString("weapons.preset", WeaponPresets.UseMode)));
+                picker.Description = WeaponPresets.DescriptionOf(WeaponPresets.Ids[picker.SelectedIndex]);
+            });
+
+            _weaponMenu.Add(new NativeItem("Applies To New Recruits",
+                "Changing the preset does not re-arm the people already out there. It takes effect " +
+                "as the riot pulls in more of the crowd, which happens continuously."));
+
+            _weaponMenu.Add(new NativeItem("Custom Preset",
+                "Pick Custom, then list weapon names in weapons.custom in user.json - " +
+                "for example [\"WEAPON_BAT\", {\"name\": \"WEAPON_PISTOL\", \"weight\": 0.2}]. " +
+                "Reload with " + _config.GetString("menu.reloadKey", "F5") + "."));
+        }
+
+        /// <summary>
+        /// Car chases. The trigger is provocation, not proximity, so these settings are mostly
+        /// about how long a grudge lasts and how hard it is to shake.
+        /// </summary>
+        private void BuildPursuitMenu()
+        {
+            _pursuitMenu = new NativeMenu("Tonight's The Night", "CAR CHASES");
+            _pool.Add(_pursuitMenu);
+            AddSubMenu(_pursuitMenu, "Car Chases", "Hurt someone and drive off, and their side comes after you.");
+
+            AddToggle(_pursuitMenu, "Car Chases", "features.pursuit.enabled", true,
+                "Off: nobody follows you. Everything else here does nothing.");
+
+            AddRangeSlider(_pursuitMenu, "Chasers Per Car", "features.pursuit.crewSize", 3, 1, 4, 1,
+                "How many of them pile into the same car. The whole point is that it is a carload.");
+
+            AddRangeSlider(_pursuitMenu, "Chases At Once", "features.pursuit.maxChases", 2, 1, 4, 1,
+                "How many separate carloads can be after you at the same time.");
+
+            AddRangeSlider(_pursuitMenu, "Grudge Length", "features.pursuit.grudgeSeconds", 45, 10, 180, 10,
+                "Seconds after you hurt someone that their side still wants you.");
+
+            AddToggle(_pursuitMenu, "Drive-Bys", "features.pursuit.driveBys", true,
+                "Passengers lean out and shoot. The driver keeps both hands on the wheel.");
+
+            AddToggle(_pursuitMenu, "Ram Instead Of Chase", "features.pursuit.ram", false,
+                "On: they drive into you rather than tailing you. Shorter, louder chases.");
+
+            AddRangeSlider(_pursuitMenu, "Give Up Distance", "features.pursuit.giveUpDistance", 320, 100, 800, 50,
+                "How far ahead you have to get before they start losing interest.");
+
+            AddToggle(_pursuitMenu, "Blip The Chase Car", "features.pursuit.blip", true,
+                "Puts their car on the minimap. It flashes once they are close.");
+
+            AddToggle(_pursuitMenu, "Announce Chases", "features.pursuit.notify", true,
+                "A notification when a carload sets off after you.");
+        }
+
+        private void BuildLootMenu()
+        {
+            _lootMenu = new NativeMenu("Tonight's The Night", "LOOTING");
+            _pool.Add(_lootMenu);
+            AddSubMenu(_lootMenu, "Looting", "People taking advantage. Starts once the riot has been going a while.");
+
+            AddToggle(_lootMenu, "Looting", "features.looting.enabled", true,
+                "Only runs during phases the mode marks as looting phases.");
+
+            AddRangeSlider(_lootMenu, "Looters At Once", "features.looting.maxActive", 6, 0, 20, 2,
+                "How many people are carrying something off at any one time.");
+
+            AddToggle(_lootMenu, "Carry Things", "features.looting.carryProps", true,
+                "Televisions, cases and bin bags. Off: they just leave in a hurry.");
+
+            AddToggle(_lootMenu, "Steal Cars", "features.looting.stealVehicles", true,
+                "Some looters take a parked car instead. Empty cars only.");
+
+            AddPercentSlider(_lootMenu, "Fighters Who Loot", "features.looting.fighterChance", 0.2f,
+                "How often someone mid-fight breaks off to loot. Low keeps the riot fighting.");
         }
 
         private void BuildZoneMenu()

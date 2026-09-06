@@ -48,8 +48,12 @@ namespace TonightsTheNight.Core
                 {
                     Function.Call(Hash.SET_PED_ACCURACY, ped, faction.Accuracy);
                 }
-                GiveWeapons(ped, faction);
-                ApplyDurability(ped, faction);
+                // Resolved per ped rather than cached, because the preset can be changed from
+                // the menu mid-riot and the next person recruited should reflect that.
+                WeaponPreset preset = faction.TakesWeaponPreset ? WeaponPresets.Active(_config) : null;
+
+                GiveWeapons(ped, faction, preset);
+                ApplyDurability(ped, faction, preset);
             }
             else if (reaction == Reaction.Flee || reaction == Reaction.Cower)
             {
@@ -99,11 +103,14 @@ namespace TonightsTheNight.Core
             // player the mode declared neutral. Who hates whom is the matrix's job alone.
         }
 
-        private void ApplyDurability(Ped ped, Faction faction)
+        private void ApplyDurability(Ped ped, Faction faction, WeaponPreset preset)
         {
             try
             {
-                if (faction.Armour > 0) { ped.Armor = faction.Armour; }
+                // A preset's armour is part of the preset: "armed and armoured" is not the
+                // realistic riot with better guns, it is a different event.
+                int armour = preset != null ? preset.Armour : faction.Armour;
+                if (armour > 0) { ped.Armor = armour; }
                 if (faction.Health > 0)
                 {
                     ped.MaxHealth = faction.Health;
@@ -116,18 +123,27 @@ namespace TonightsTheNight.Core
             }
         }
 
-        private void GiveWeapons(Ped ped, Faction faction)
+        /// <summary>
+        /// A selected preset replaces the faction's own loadout, but only for the factions drawn
+        /// from the ambient crowd. Picking "military" arms the mob with carbines; it does not
+        /// re-equip the actual army, which already has the kit its mode author gave it.
+        /// </summary>
+        private void GiveWeapons(Ped ped, Faction faction, WeaponPreset preset)
         {
-            if (faction.Weapons.Count == 0) { return; }
-            if (_random.NextDouble() > faction.ArmedChance) { return; }
+            WeaponTable table = preset != null ? preset.Weapons : faction.Weapons;
+            float armedChance = preset != null ? preset.ArmedChance : faction.ArmedChance;
+            int ammo = preset != null ? preset.Ammo : faction.Ammo;
 
-            string name = faction.PickWeapon(_random);
+            if (table.Count == 0) { return; }
+            if (_random.NextDouble() > armedChance) { return; }
+
+            string name = table.Pick(_random);
             if (name == null) { return; }
 
             uint hash = ResolveWeapon(name);
             if (hash == 0) { return; }
 
-            Function.Call(Hash.GIVE_WEAPON_TO_PED, ped, hash, faction.Ammo, false, true);
+            Function.Call(Hash.GIVE_WEAPON_TO_PED, ped, hash, ammo, false, true);
         }
 
         /// <summary>

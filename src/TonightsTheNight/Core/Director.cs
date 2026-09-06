@@ -28,11 +28,16 @@ namespace TonightsTheNight.Core
         private readonly Spawner _spawner;
         private readonly VehicleBehaviour _vehicles;
         private readonly Random _random = new Random();
+        private readonly Pursuit _pursuit;
+        private readonly Looting _looting;
 
         public Escalation Escalation { get; private set; }
         public RiotZone Zone { get; private set; }
         public Ambience Ambience { get; private set; }
         public PurgeClock Purge { get; private set; }
+
+        public Pursuit Pursuit { get { return _pursuit; } }
+        public Looting Looting { get { return _looting; } }
 
         /// <summary>Recruits confirmed dead, as opposed to merely despawned. Drives escalation.</summary>
         public int Kills { get; private set; }
@@ -78,6 +83,8 @@ namespace TonightsTheNight.Core
             _conditioner = new PedConditioner(config, _relationships, _random);
             _spawner = new Spawner(config, _models, _random);
             _vehicles = new VehicleBehaviour(config);
+            _pursuit = new Pursuit(config, _random);
+            _looting = new Looting(config, _models, _random);
 
             Escalation = new Escalation(config);
             Zone = new RiotZone(config);
@@ -96,6 +103,7 @@ namespace TonightsTheNight.Core
 
             _config.SetModeOverrides(mode.Overrides);
             CombatAttribute.LoadOverrides(_config);
+            WeaponPresets.Reset();
 
             foreach (Faction faction in mode.Factions)
             {
@@ -111,6 +119,8 @@ namespace TonightsTheNight.Core
             Ambience.Apply(mode.Ambience);
             Purge.Begin(mode.Purge);
             _spawner.Reset();
+            _pursuit.Reset();
+            _looting.Reset();
 
             ActiveMode = mode;
             Kills = 0;
@@ -136,6 +146,11 @@ namespace TonightsTheNight.Core
                      ", culled " + CulledTotal + ", still active " + _registry.Count +
                      ", peak tick " + PeakTickMs.ToString("F2") + "ms.");
 
+            // Chases and looting hold their own tasks and props, so they are unwound before
+            // the registry hands the peds back.
+            _pursuit.EndAll();
+            _looting.EndAll();
+
             if (_config.GetBool("riot.restoreWorldOnStop", true))
             {
                 BeginPacifying(_registry.Tracked);
@@ -160,6 +175,8 @@ namespace TonightsTheNight.Core
         {
             try
             {
+                _pursuit.EndAll();
+                _looting.EndAll();
                 _registry.RestoreAll();
                 Ambience.Clear();
                 Zone.Clear();
@@ -201,7 +218,13 @@ namespace TonightsTheNight.Core
                 Zone.RefreshBlip();
 
                 Phase phase = Escalation.CurrentPhase;
-                Ambience.UpdateFires(Zone.Centre, !Escalation.Enabled || phase == null || phase.Fires);
+                bool unphased = !Escalation.Enabled || phase == null;
+                Ambience.UpdateFires(Zone.Centre, unphased || phase.Fires);
+
+                // Both throttle themselves, and both need to run while the player is driving
+                // rather than only when the recruiting pass happens to come round.
+                _pursuit.Update(_registry.Tracked);
+                _looting.Update(_registry.Tracked, unphased || phase.Looting);
 
                 // Recruiting and retasking are the expensive half and do not need frame rate.
                 if (Game.GameTime >= _nextWorkAt)
@@ -377,6 +400,8 @@ namespace TonightsTheNight.Core
             Log.Info("Riot: active " + _registry.Count + "/" + _config.GetInt("engine.maxTrackedPeds", 120) +
                      ", recruited " + RecruitedTotal + ", lost " + LostTotal + ", kills " + Kills +
                      ", culled " + CulledTotal + ", fires " + Ambience.ActiveFires +
+                     ", chases " + _pursuit.ActiveChases + "/" + _pursuit.Started +
+                     ", looting " + _looting.Active + "/" + _looting.Total +
                      ", phase " + Escalation.Current + " '" + Escalation.CurrentName + "'" +
                      ", tick " + LastTickMs.ToString("F2") + "ms, budget " + _budget);
         }
@@ -493,6 +518,10 @@ namespace TonightsTheNight.Core
             Ped player = Game.Player.Character;
             GTA.Math.Vector3 origin = player.Position;
 
+            // Running someone over counts as provocation, and the damage is credited to the
+            // car rather than to you. Read once per pass, not once per ped.
+            Vehicle ride = player.CurrentVehicle;
+
             // Compared squared to keep a square root out of the per-ped path.
             float cull = _config.GetFloat("engine.cullDistance", 450f);
             float cullSquared = cull * cull;
@@ -508,12 +537,26 @@ namespace TonightsTheNight.Core
 
                 if (!entry.IsUsable || !EntityRegistry.IsSameEntity(entry))
                 {
-                    if (entry.Ped != null && entry.Ped.Exists() && entry.Ped.IsDead) { Kills++; }
+                    if (entry.Ped != null && entry.Ped.Exists() && entry.Ped.IsDead)
+                    {
+                        Kills++;
+
+                        // Killing someone is the loudest provocation there is, and the one most
+                        // likely to be followed by driving away from it. A kill by car is
+                        // credited to the car, which is exactly the case worth catching.
+                        int killer = Function.Call<int>(Hash.GET_PED_SOURCE_OF_DEATH, entry.Ped);
+                        if (killer == player.Handle || (ride != null && ride.Exists() && killer == ride.Handle))
+                        {
+                            _pursuit.NoteProvoked(entry.Faction);
+                        }
+                    }
 
                     _registry.Remove(entry, false);
                     LostTotal++;
                     continue;
                 }
+
+                NoteProvocation(entry, player, ride);
 
                 float rangeSquared = origin.DistanceToSquared(entry.Ped.Position);
 
@@ -537,6 +580,30 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
+        /// Notices that the player has shot, run over or otherwise hurt this ped, and tells the
+        /// pursuit system its faction now has a reason to come after them.
+        ///
+        /// The damage flag is cleared afterwards so one shot does not keep re-provoking the
+        /// same faction on every pass over the list.
+        /// </summary>
+        private void NoteProvocation(TrackedPed entry, Ped player, Vehicle ride)
+        {
+            if (!_pursuit.Enabled) { return; }
+
+            bool hurt = Function.Call<bool>(Hash.HAS_ENTITY_BEEN_DAMAGED_BY_ENTITY, entry.Ped, player, true);
+
+            if (!hurt && ride != null && ride.Exists())
+            {
+                hurt = Function.Call<bool>(Hash.HAS_ENTITY_BEEN_DAMAGED_BY_ENTITY, entry.Ped, ride, true);
+            }
+
+            if (!hurt) { return; }
+
+            Function.Call(Hash.CLEAR_ENTITY_LAST_DAMAGE_ENTITY, entry.Ped);
+            _pursuit.NoteProvoked(entry.Faction);
+        }
+
+        /// <summary>
         /// Re-issuing a fight task over the top of a ped that is already reacting to something
         /// is what produced the stutter loop: the game starts a flee, we interrupt it with a
         /// fight, the game starts another flee. Leave a ped alone while it is visibly busy.
@@ -544,6 +611,9 @@ namespace TonightsTheNight.Core
         private bool ShouldRetask(TrackedPed entry, int retaskAfterMs)
         {
             if (entry.Reaction != Reaction.Fight) { return false; }
+            // A chase or a looting run is a task of its own; re-issuing "fight whoever is
+            // nearby" over the top of one is how a chase ends at the first junction.
+            if (entry.InPursuit || entry.Loot != null) { return false; }
             if (Game.GameTime - entry.LastTaskedAt < retaskAfterMs) { return false; }
 
             Ped ped = entry.Ped;

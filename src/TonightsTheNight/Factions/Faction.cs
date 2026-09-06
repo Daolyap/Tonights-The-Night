@@ -5,17 +5,6 @@ using TonightsTheNight.Util;
 
 namespace TonightsTheNight.Factions
 {
-    /// <summary>
-    /// One entry in a faction's loadout. Weights matter more than they look: a riot fought with
-    /// bats and crowbars sustains itself, while one fought with pistols kills off the local
-    /// population faster than the game can replace it and fizzles out into an empty street.
-    /// </summary>
-    public struct WeaponChoice
-    {
-        public string Name;
-        public float Weight;
-    }
-
     /// <summary>How members of a faction react when the shooting starts.</summary>
     public enum Reaction
     {
@@ -56,9 +45,16 @@ namespace TonightsTheNight.Factions
         /// Weighted loadout, resolved lazily so an unknown name is a log line, not a crash.
         /// Accepts either a bare name or {"name": ..., "weight": ...} in config.
         /// </summary>
-        public List<WeaponChoice> Weapons { get; private set; }
+        public WeaponTable Weapons { get; private set; }
 
-        private float _weaponWeightTotal;
+        /// <summary>
+        /// Whether a selected weapon preset replaces this faction's own loadout.
+        ///
+        /// Defaults to "yes for factions drawn from the ambient crowd, no for spawned ones",
+        /// which is the line the preset concept actually cares about: a preset answers "what is
+        /// the mob carrying", not "how is the army equipped". A mode author can override it.
+        /// </summary>
+        public bool TakesWeaponPreset { get; private set; }
 
         public int Ammo { get; private set; }
         public int Armour { get; private set; }
@@ -99,7 +95,7 @@ namespace TonightsTheNight.Factions
                 DisplayName = node["name"].AsString(id),
                 FightBackChance = Clamp01(node["fightBackChance"].AsFloat(0.25f)),
                 Share = Math.Max(0f, node["share"].AsFloat(1f)),
-                Weapons = ParseWeapons(node["weapons"]),
+                Weapons = WeaponTable.FromJson(node["weapons"]),
                 Ammo = node["ammo"].AsInt(120),
                 Armour = Math.Max(0, Math.Min(100, node["armour"].AsInt(0))),
                 Health = node["health"].AsInt(0),
@@ -108,6 +104,8 @@ namespace TonightsTheNight.Factions
                 FromPhase = node["fromPhase"].AsInt(0),
                 Accuracy = node["accuracy"].AsInt(-1),
                 Recruits = node["recruits"].AsString("none"),
+                TakesWeaponPreset = node["weaponPreset"].AsBool(
+                    !string.Equals(node["recruits"].AsString("none"), "none", StringComparison.OrdinalIgnoreCase)),
                 BlipEnabled = node["blip"]["enabled"].AsBool(true),
                 BlipSprite = ParseEnum(node["blip"]["sprite"].AsString("Standard"), BlipSprite.Standard),
                 BlipColor = ParseEnum(node["blip"]["colour"].AsString(node["blip"]["color"].AsString("White")), BlipColor.White),
@@ -116,50 +114,10 @@ namespace TonightsTheNight.Factions
             return faction;
         }
 
-        private static List<WeaponChoice> ParseWeapons(JsonValue node)
-        {
-            var result = new List<WeaponChoice>();
-
-            foreach (JsonValue entry in node.Items)
-            {
-                if (entry.IsObject)
-                {
-                    string name = entry["name"].AsString(null);
-                    if (name == null)
-                    {
-                        Log.Warn("Weapon entry has no 'name'. Skipped.");
-                        continue;
-                    }
-                    result.Add(new WeaponChoice { Name = name, Weight = Math.Max(0.01f, entry["weight"].AsFloat(1f)) });
-                }
-                else
-                {
-                    string name = entry.AsString(null);
-                    if (name != null) { result.Add(new WeaponChoice { Name = name, Weight = 1f }); }
-                }
-            }
-
-            return result;
-        }
-
-        /// <summary>Weighted pick, so a loadout can be mostly melee with the odd firearm.</summary>
+        /// <summary>Weighted pick from this faction's own loadout.</summary>
         public string PickWeapon(Random random)
         {
-            if (Weapons.Count == 0) { return null; }
-
-            if (_weaponWeightTotal <= 0f)
-            {
-                foreach (WeaponChoice choice in Weapons) { _weaponWeightTotal += choice.Weight; }
-            }
-
-            double roll = random.NextDouble() * _weaponWeightTotal;
-            foreach (WeaponChoice choice in Weapons)
-            {
-                roll -= choice.Weight;
-                if (roll <= 0) { return choice.Name; }
-            }
-
-            return Weapons[Weapons.Count - 1].Name;
+            return Weapons.Pick(random);
         }
 
         /// <summary>

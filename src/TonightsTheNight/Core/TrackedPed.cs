@@ -32,6 +32,19 @@ namespace TonightsTheNight.Core
         /// <summary>Game time of the last retask, so we do not re-issue tasks every tick.</summary>
         public int LastTaskedAt;
 
+        /// <summary>
+        /// True while this ped is in a car chase. The Director leaves them alone: re-issuing a
+        /// fight task over the top of a pursuit is exactly how a chase ends thirty feet down
+        /// the road with everyone getting out to punch a lamppost.
+        /// </summary>
+        public bool InPursuit;
+
+        /// <summary>Seat they were assigned in a chase. -1 is the driver.</summary>
+        public int PursuitSeat;
+
+        /// <summary>Prop this ped is carrying while looting, if any.</summary>
+        public Prop Loot;
+
         public bool IsUsable
         {
             get { return Ped != null && Ped.Exists() && !Ped.IsDead; }

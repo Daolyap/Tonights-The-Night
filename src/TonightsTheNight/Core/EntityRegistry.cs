@@ -65,8 +65,10 @@ namespace TonightsTheNight.Core
         public void Remove(TrackedPed entry, bool restore)
         {
             // The blip goes in every path. Deleting it only on the restore path is why blips
-            // outlived the peds they were attached to.
+            // outlived the peds they were attached to. A carried loot prop is the same problem
+            // wearing a different hat.
             DeleteBlip(entry);
+            DeleteLoot(entry);
 
             if (restore) { Restore(entry); }
 
@@ -87,6 +89,7 @@ namespace TonightsTheNight.Core
                 if (IsSameEntity(entry)) { continue; }
 
                 DeleteBlip(entry);
+                DeleteLoot(entry);
                 if (entry.Ped != null) { _byHandle.Remove(entry.Ped.Handle); }
                 _tracked.RemoveAt(i);
                 removed++;
@@ -110,6 +113,8 @@ namespace TonightsTheNight.Core
         private static void Restore(TrackedPed entry)
         {
             DeleteBlip(entry);
+            DeleteLoot(entry);
+            entry.InPursuit = false;
 
             try
             {
@@ -133,6 +138,10 @@ namespace TonightsTheNight.Core
                 Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, ped, 0, true);
                 Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.AlwaysFight, false);
                 Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.CanFightArmedPedsWhenNotArmed, false);
+                // A pursuit turns these on. Leaving CanLeaveVehicle off would strand a ped in
+                // whatever car the chase ended in for the rest of the session.
+                Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.CanLeaveVehicle, true);
+                Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.CanDoDrivebys, false);
                 Function.Call(Hash.SET_PED_KEEP_TASK, ped, false);
                 // Hand ambient events back, or the ped stays deaf to the world after the riot.
                 ped.BlockPermanentEvents = false;
@@ -144,6 +153,27 @@ namespace TonightsTheNight.Core
             {
                 Log.Error("Failed to restore a ped", ex);
             }
+        }
+
+        /// <summary>
+        /// A loot prop is attached to the ped's hand. Detaching before deleting matters: the
+        /// game does not always take kindly to an attachment vanishing out from under a bone.
+        /// </summary>
+        private static void DeleteLoot(TrackedPed entry)
+        {
+            try
+            {
+                if (entry.Loot != null && entry.Loot.Exists())
+                {
+                    Function.Call(Hash.DETACH_ENTITY, entry.Loot, true, true);
+                    entry.Loot.Delete();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failed to delete a loot prop", ex);
+            }
+            entry.Loot = null;
         }
 
         private static void DeleteBlip(TrackedPed entry)

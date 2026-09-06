@@ -168,6 +168,7 @@ namespace TonightsTheNight.Core
                 ApplyLogLevel();
                 ReadKeybinds();
                 Compatibility.Reset();
+                WeaponPresets.Reset();
                 _modes.Load();
                 _menu.Rebuild();
 

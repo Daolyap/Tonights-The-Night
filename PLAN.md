@@ -248,17 +248,53 @@ walking through a war zone, or join a side.
 
 ### 6.2 Weapon presets
 
-Presets are per-faction, not global — police can be on *Realistic* while rioters are on *Chaos*.
-
 | Preset | Contents | Also sets |
 |---|---|---|
-| Realistic | Melee, pistols, a few SMGs, occasional shotgun | Low ammo, low accuracy, no armour |
-| Armed & Armoured | Rifles, SMGs, shotguns | Body armour, raised health, mid accuracy |
-| Military | Carbines, MGs, grenade launchers, RPGs | Full armour, high accuracy, high combat ability |
-| Chaos | RPG, minigun, railgun, firework launcher, explosives | High accuracy, no restraint |
-| Custom | Weighted list from JSON | Per-entry ammo, attachments, tints |
+| Mode's Own | Whatever the mode declared. **The default** | — |
+| Realistic | Bats, bottles, crowbars, the odd pistol | 85% armed, no armour |
+| Armed & Armoured | Pistols, SMGs, shotguns | 100% armed, 50 armour |
+| Military | Carbines, MGs, grenades | 100% armed, full armour |
+| Chaos | RPG, minigun, railgun, fireworks, extinguishers | 100% armed, 25 armour |
+| Custom | Weighted list from `weapons.custom` in `user.json` | Own armour, ammo, armed chance |
 
-Alien loadouts are a preset too: `RayGun`, `UnholyHellbringer`, `Widowmaker`, `CompactEMPLauncher`.
+Armour and armed-chance travel *with* the preset rather than being separate sliders, because
+they are the same decision: "armed and armoured" is not the realistic riot with better guns, it
+is a different event. Separating them would only let you build the incoherent middle.
+
+**Built differently from the original sketch, deliberately.** The plan said per-faction, so that
+police could be on *Realistic* while rioters were on *Chaos*. In practice a mode already
+specifies its own loadouts per faction — that *is* the per-faction mechanism, and it is more
+expressive than a preset name. What was missing was a way to change the whole riot's character
+from the menu without editing JSON. So the preset is one picker, and it replaces the loadouts of
+the factions drawn from the **ambient crowd** while leaving spawned ones alone:
+
+- Picking *Military* arms the mob with carbines. It does not re-equip the actual army, which
+  already has the kit its mode author gave it, and it does not hand carbines to coyotes.
+- A mode author can override the line either way with `"weaponPreset": true|false` on a faction.
+
+Alien loadouts stay a mode's own concern rather than a preset: `RayPistol`, `UnholyHellbringer`,
+`Widowmaker` are what Invasion declares, and no preset overwrites them.
+
+### 6.2a Car chases
+
+Not in the original sketch — it came out of playing it. The complaint it answers is that the
+riot let you commit to something and then simply leave.
+
+The trigger is **provocation, not proximity**. Damaging or killing a tracked ped puts a grudge on
+their faction; trying to drive away while that grudge is live forms a chase. Standing still in a
+car does not qualify — that should get you dragged out of it, not tailed.
+
+A chase is a **carload**. The nearest angry ped drives, their nearest allies run to the same
+vehicle, and it does not set off until everyone is aboard (or seven seconds pass, after which
+stragglers are put in — a chase that never leaves the kerb is worse than one that starts a bit
+too neatly). Passengers do drive-bys; the driver drives. They prefer a car their faction is
+already sitting in, which dovetails with the existing "people sharing a car are on the same
+side" rule, and otherwise take the nearest empty one. Never an occupied car: hauling a stranger
+out can reach a mission ped, or one another mod owns.
+
+Like everything else here it is **built from relationship groups and tasks, never the wanted
+system**, so a police or wanted overhaul runs underneath it untouched. You can be chased by a
+mob while separately holding four stars from the game's own police.
 
 ### 6.3 Police that act like police
 
@@ -335,7 +371,7 @@ with all of them off; none is load-bearing for another, except where the Depends
 | 4 | **Pick a side** | Off | Which faction you join or none, whether neutrality breaks on your first shot, whether allies defend you, friendly-fire on/off, whether cops recognise your allegiance | — |
 | 5 | **Purge specifics** | On (Purge mode only) | Start and end time, countdown length, announcement on/off, siren audio on/off, curfew behaviour (peds go home vs. simply stand down), whether police stand down during the window, post-purge cleanup behaviour | 2 |
 | 6 | **Weather and timecycle** | On | Weather type and whether it's locked, time of day, whether time is frozen, timecycle modifier name and strength, all overridable per-mode — and a global "never touch my weather" master switch | — |
-| 7 | **Looting** | On | Share of rioters who loot, target types (storefronts / vehicles / both), carry props on/off, whether looting starts fires, how long before a looter rejoins the riot | — |
+| 7 | **Looting** | On | How many loot at once, how often, whether they carry props, whether they steal cars and how often, how far they run, how long before a looter rejoins the riot. *Storefronts are not in: the game has no shop interiors to break into, so looting is a prop in someone's hands and somewhere else to be — which reads correctly and is the honest version of the idea* | — |
 | 8 | **Debug overlay** | Off | Which panels (perf / entity counts / per-faction kills / spawn failures / budget headroom), screen position, opacity, its own keybind, and a log-only mode with no on-screen draw | — |
 | 9 | **Hot-reload configs** | On | Keybind, auto-watch file timestamps on/off, and whether a reload restarts the running mode or applies live to existing entities | — |
 | 10 | **Named profiles** | On | Save / load / rename / delete, autoload a named profile at startup, what a profile captures (everything, or just the extras), export and import as a file | — |

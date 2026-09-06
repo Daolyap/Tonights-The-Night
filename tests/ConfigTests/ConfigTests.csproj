@@ -15,7 +15,11 @@
   -->
   <ItemGroup>
     <Compile Include="../../src/TonightsTheNight/Util/Json.cs" />
+    <Compile Include="../../src/TonightsTheNight/Util/Log.cs" />
     <Compile Include="../../src/TonightsTheNight/Config/DefaultConfig.cs" />
+    <Compile Include="../../src/TonightsTheNight/Config/ConfigStore.cs" />
+    <Compile Include="../../src/TonightsTheNight/Factions/WeaponTable.cs" />
+    <Compile Include="../../src/TonightsTheNight/Factions/WeaponPresets.cs" />
   </ItemGroup>
 
 </Project>

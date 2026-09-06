@@ -1,5 +1,76 @@
 # Changelog
 
+## v0.3.0 — chases, looting, weapon presets
+
+The three things from the original vision that were still only a plan.
+
+### Added — car chases
+
+Hurt someone and then drive away, and their side comes after you.
+
+The trigger is **provocation, not proximity**: shooting someone, running them over, or killing
+them puts a grudge on their faction for 45 seconds. Try to drive off while that grudge is live
+and a carload forms up behind you. Standing still in a car does not qualify — that should get
+you dragged out of it, not tailed.
+
+It is a **carload**, not a car. The nearest angry ped becomes the driver, their nearest allies
+run to the same vehicle and get in, and the chase does not start until everyone is aboard. They
+pile in on foot where there is time and get warped in when there is not, because a chase that
+never leaves the kerb is worse than one that starts slightly too neatly. Passengers lean out and
+shoot; the driver keeps both hands on the wheel.
+
+They prefer a car the faction is already sitting in — which combines with the existing "people
+sharing a car are on the same side" rule — and otherwise take the nearest empty one. Never an
+occupied car: hauling a stranger out can reach a mission ped or one another mod owns.
+
+They give up if you get 320m ahead and stay there for twelve seconds, if the car is wrecked, or
+after two and a half minutes. All of that is on sliders, along with crew size, how many carloads
+can be after you at once, drive-bys, and a "ram instead of chase" switch.
+
+**No part of this touches the wanted system.** A chase is peds, a car and tasks — so a police or
+wanted overhaul carries on underneath it, and you can be chased by a mob while separately having
+four stars from the game's own police.
+
+### Added — looting
+
+GTA has no shop interiors to break into, so this is built from what the engine does do well: a
+prop in someone's hands and somewhere else to be. A man running down the middle of the street
+with a television reads as looting instantly.
+
+Some looters take a parked car instead and drive off in it. Gated on the escalation phase, so it
+starts once the riot has been going a while rather than in the first thirty seconds — and mostly
+done by the people who were never going to fight, which stops it thinning out the riot.
+
+### Added — weapon presets
+
+The five from the original plan, as one picker under **Weapons**:
+
+| Preset | |
+|---|---|
+| **Mode's Own** | Default. Leaves each mode's loadouts exactly as their author balanced them |
+| **Realistic** | Bats, bottles, crowbars, the odd pistol. Sustains itself the longest |
+| **Armed And Armoured** | Everyone tooled up and wearing a vest. Firefights instead of brawls |
+| **Military** | Carbines, machine guns, grenades. Short, because everything dies quickly |
+| **Chaos** | Rockets, miniguns, fireworks and fire extinguishers. Not meant to be balanced |
+| **Custom** | Your own weighted list in `user.json` |
+
+A preset carries armour and how many people are armed at all, not just the weapons, because
+those are the same decision — splitting them across three sliders would only let you build the
+incoherent middle.
+
+A preset replaces the loadout of the factions drawn from the **ambient crowd** and leaves spawned
+ones alone. Picking Military arms the mob with carbines; it does not re-equip the actual army,
+which already has the kit its mode author gave it. Animals stay animals.
+
+### Testing
+
+New in CI: the shipped weapon presets, and a base-game weapon list that every weapon name in
+every shipped preset and mode is now checked against. A wrong weapon name is completely silent
+in-game — the faction just goes out unarmed — so it is checked here instead. The checker has its
+own tests, because one that says yes to everything would pass every check while catching nothing.
+
+---
+
 ## v0.2.0 — the rest of the mod
 
 All eight riot modes, spawned factions, escalation, zones, fires, weather and profiles.

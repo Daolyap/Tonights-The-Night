@@ -41,6 +41,11 @@ namespace TonightsTheNight.Core
                 }
                 sb.AppendLine("active: " + director.TrackedCount + "   recruited: " + director.RecruitedTotal +
                               "   lost: " + director.LostTotal + "   culled: " + director.CulledTotal);
+                if (director.IsRunning)
+                {
+                    sb.AppendLine("chases: " + director.Pursuit.ActiveChases + " (" + director.Pursuit.Started +
+                                  " total)   looting: " + director.Looting.Active + " (" + director.Looting.Total + " total)");
+                }
             }
 
             if (_config.GetBool("features.debugOverlay.showPerformance", true))

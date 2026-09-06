@@ -135,6 +135,9 @@ class Program
         Console.WriteLine("--- every shipped riot mode ---");
         failures += StockModeTests.Run();
 
+        Console.WriteLine("--- the shipped weapon presets ---");
+        failures += WeaponPresetTests.Run();
+
         Console.WriteLine("--- every config path the code reads is declared in defaults ---");
         failures += ConfigPathCoverage.Run();
 

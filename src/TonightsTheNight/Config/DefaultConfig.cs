@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.2.0";
+        public const string Version = "0.3.0";
 
         public static JsonValue Build()
         {
@@ -97,6 +97,19 @@ namespace TonightsTheNight.Config
             combat.Set("attributeIds", attributeIds);
 
             root.Set("combat", combat);
+
+            // Weapon presets. "mode" leaves each mode's own loadouts alone and is the default,
+            // because a mode author balanced theirs and a preset cannot know that. The others
+            // replace the loadout of the factions drawn from the ambient crowd only - a preset
+            // answers "what is the mob carrying", not "how is the army equipped".
+            JsonValue weapons = JsonValue.NewObject();
+            weapons.Set("preset", JsonValue.Of("mode"));   // mode | realistic | armed | military | chaos | custom
+            // Used when preset is "custom". Bare names or {"name": ..., "weight": ...}.
+            weapons.Set("custom", JsonValue.NewArray());
+            weapons.Set("customArmedChance", JsonValue.Of(1.0));
+            weapons.Set("customArmour", JsonValue.Of(0));
+            weapons.Set("customAmmo", JsonValue.Of(120));
+            root.Set("weapons", weapons);
 
             JsonValue blips = JsonValue.NewObject();
             blips.Set("enabled", JsonValue.Of(true));
@@ -193,6 +206,63 @@ namespace TonightsTheNight.Config
             police.Set("targetReachedDistance", JsonValue.Of(5));
             police.Set("straightLineDistance", JsonValue.Of(8));
             features.Set("police", police);
+
+            // Car chases. Provocation-driven: hurt someone and drive away, and their side
+            // comes after you in a carload. Never touches the wanted system, so this can run
+            // alongside a police or wanted overhaul without either noticing the other.
+            JsonValue pursuit = JsonValue.NewObject();
+            pursuit.Set("enabled", JsonValue.Of(true));
+            // How long after you hurt someone their faction still wants to chase you.
+            pursuit.Set("grudgeSeconds", JsonValue.Of(45));
+            pursuit.Set("maxChases", JsonValue.Of(2));
+            pursuit.Set("crewSize", JsonValue.Of(3));
+            // "Tries to drive off" is the trigger, in metres per second. Sitting still in a
+            // car should get you dragged out of it, not tailed.
+            pursuit.Set("minPlayerSpeed", JsonValue.Of(6));
+            pursuit.Set("formRadius", JsonValue.Of(120));
+            pursuit.Set("gatherRadius", JsonValue.Of(35));
+            pursuit.Set("vehicleSearchRadius", JsonValue.Of(45));
+            // How long the crew gets to reach the car on foot before they are warped in. A
+            // chase that never leaves the kerb is worse than one that starts a bit too neatly.
+            pursuit.Set("boardTimeoutMs", JsonValue.Of(7000));
+            pursuit.Set("cooldownMs", JsonValue.Of(12000));
+            pursuit.Set("updateIntervalMs", JsonValue.Of(500));
+            pursuit.Set("retaskMs", JsonValue.Of(5000));
+            pursuit.Set("giveUpDistance", JsonValue.Of(320));
+            pursuit.Set("giveUpSeconds", JsonValue.Of(12));
+            pursuit.Set("maxSeconds", JsonValue.Of(150));
+            pursuit.Set("driveBys", JsonValue.Of(true));
+            pursuit.Set("driveByRange", JsonValue.Of(60));
+            pursuit.Set("driveByAccuracy", JsonValue.Of(40));
+            // Off: they tail you and shoot. On: they drive into you instead.
+            pursuit.Set("ram", JsonValue.Of(false));
+            pursuit.Set("aggressiveness", JsonValue.Of(1.0));
+            pursuit.Set("driverAbility", JsonValue.Of(1.0));
+            pursuit.Set("cruiseSpeed", JsonValue.Of(60));
+            pursuit.Set("drivingStyle", JsonValue.Of(786603));
+            pursuit.Set("blip", JsonValue.Of(true));
+            pursuit.Set("notify", JsonValue.Of(true));
+            features.Set("pursuit", pursuit);
+
+            // Looting. Gated on the escalation phase, so it starts once the riot has been
+            // going a while rather than in the first thirty seconds.
+            JsonValue looting = JsonValue.NewObject();
+            looting.Set("enabled", JsonValue.Of(true));
+            looting.Set("maxActive", JsonValue.Of(6));
+            looting.Set("intervalMs", JsonValue.Of(6000));
+            looting.Set("radius", JsonValue.Of(90));
+            looting.Set("jobSeconds", JsonValue.Of(40));
+            looting.Set("runDistance", JsonValue.Of(70));
+            looting.Set("carryProps", JsonValue.Of(true));
+            // Fighters are busy. Looting is mostly what the people who were never going to
+            // fight do instead, which is also what stops it thinning out the riot.
+            looting.Set("fighterChance", JsonValue.Of(0.2));
+            looting.Set("stealVehicles", JsonValue.Of(true));
+            looting.Set("vehicleChance", JsonValue.Of(0.25));
+            looting.Set("vehicleSearchRadius", JsonValue.Of(30));
+            looting.Set("getawaySpeed", JsonValue.Of(25));
+            looting.Set("drivingStyle", JsonValue.Of(786603));
+            features.Set("looting", looting);
 
             JsonValue profiles = JsonValue.NewObject();
             profiles.Set("enabled", JsonValue.Of(true));

@@ -6,8 +6,9 @@ Riot modes built from **factions** — who they are, what they carry, who they h
 react when it starts. Modes and factions are JSON files, not code, so a custom faction needs no
 build step. Every optional feature is a switch with its own settings block.
 
-**Status:** v0.2.0 — playable. Eight modes, spawned factions, escalation, zones and fires are in.
-See [`CHANGELOG.md`](CHANGELOG.md) for what landed and [`PLAN.md`](PLAN.md) for the design.
+**Status:** v0.3.0 — playable. Eight modes, spawned factions, escalation, zones, fires, car
+chases, looting and weapon presets are in. See [`CHANGELOG.md`](CHANGELOG.md) for what landed
+and [`PLAN.md`](PLAN.md) for the design.
 
 | Mode | |
 |---|---|
@@ -19,6 +20,10 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what landed and [`PLAN.md`](PLAN.md) for 
 | Invasion | Aliens, with weapons already in your game |
 | The Purge | Twelve minutes, then it stops |
 | Everything | All of it, escalating |
+
+Plus, across all of them: **car chases** (hurt someone, drive off, and a carload of their side
+comes after you), **looting**, **escalation phases**, **riot zones**, **fires and weather**, and
+**weapon presets** — realistic, armed and armoured, military, chaos, or your own list.
 
 ## Install
 

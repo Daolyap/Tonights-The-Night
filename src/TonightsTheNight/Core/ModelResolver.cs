@@ -62,6 +62,25 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
+        /// Every candidate the game actually has, rather than just the first.
+        ///
+        /// Used where variety is the point: a street of looters all carrying the identical
+        /// television reads as a bug, so the caller wants the whole set and picks at random.
+        /// </summary>
+        public List<Model> ResolveAll(IEnumerable<string> candidates)
+        {
+            var found = new List<Model>();
+
+            foreach (string name in candidates)
+            {
+                Model model;
+                if (TryResolve(new[] { name }, out model)) { found.Add(model); }
+            }
+
+            return found;
+        }
+
+        /// <summary>
         /// Requests the model and waits briefly. Streaming is asynchronous, so spawning without
         /// this produces an invisible or missing entity rather than an error.
         /// </summary>
