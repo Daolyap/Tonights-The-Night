@@ -23,7 +23,7 @@ namespace TonightsTheNight.Core
             get { return _config.GetBool("features.debugOverlay.enabled", false); }
         }
 
-        public void Draw(Director director, int modeCount)
+        public void Draw(Director director, int modeCount, double menuDrawMs = 0)
         {
             if (!Enabled) { return; }
 
@@ -50,7 +50,8 @@ namespace TonightsTheNight.Core
 
             if (_config.GetBool("features.debugOverlay.showPerformance", true))
             {
-                sb.AppendLine("tick: " + director.LastTickMs.ToString("F2") + "ms   peak: " + director.PeakTickMs.ToString("F2") + "ms   budget: " + director.CurrentBudget);
+                sb.AppendLine("tick: " + director.LastTickMs.ToString("F2") + "ms   peak: " + director.PeakTickMs.ToString("F2") +
+                              "ms   budget: " + director.CurrentBudget + "   menu: " + menuDrawMs.ToString("F2") + "ms");
             }
 
             if (_config.GetBool("features.debugOverlay.showFactions", true) && director.IsRunning)

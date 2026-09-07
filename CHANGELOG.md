@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.9.0 — the city, not just the crowd
+
+Everything until now arranged pedestrians. That is the part GTA is good at, and it is also the
+part that stops short: a hundred people fighting on an otherwise normal street still looks like
+a normal street.
+
+### Added — blackout
+
+The city's power fails in the late phases. Street lights, shop signs, window light — the whole
+map, one native. At night the difference is total, and it is what the Purge was always missing.
+Headlights are unaffected, or it would be unreadable rather than dramatic.
+
+Restored on stop and on script abort, so a crash never leaves you with a dark Los Santos.
+
+### Added — barricades
+
+Rioters drag street furniture across the roads and set it alight. Built on road nodes and laid
+perpendicular to the way the road runs, so they sit *across* the carriageway rather than beside
+it. Cars can still smash through — they are physics props, not walls, and that is the point.
+
+### Added — smoke columns
+
+Rising off the burning barricades, so a riot is visible from the other side of the map rather
+than only from inside it. The particle asset and effect names are community-documented, so both
+are settings: if the smoke never appears, that is where to look.
+
+### Added — helicopter searchlights
+
+Sweeping a blacked-out street is most of what a helicopter is for.
+
+### Changed — the menu
+
+Stripping the banner and the corner Scaleform was a guess at the frame rate, and it did not
+work. The decoration is back and styled instead: a flat red banner rather than the stock blue
+texture, better fonts, wider, with an item count. `menu.bannerColour` takes `"r,g,b"` if you want
+a different one, and `menu.lightweight` still gives you the bare version.
+
+**The menu is now timed separately** and the figure is on the debug overlay next to the tick time.
+Two attempts at this have been guesses; the next one will not be. If it reads 0.2ms while the
+frame rate is halved, the cost is not the menu.
+
+---
+
 ## v0.8.0 — the mod did not own anything it created
 
 The despawning and the missing vehicles were one bug, and it was in the first line of every

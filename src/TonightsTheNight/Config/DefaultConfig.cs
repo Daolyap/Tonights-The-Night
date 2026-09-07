@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.8.0";
+        public const string Version = "0.9.0";
 
         public static JsonValue Build()
         {
@@ -28,7 +28,14 @@ namespace TonightsTheNight.Config
             // in the corner (a Scaleform, redrawn every frame), the banner texture, mouse
             // support and edge-of-screen camera rotation. The menu keeps its title, items and
             // descriptions. Set false if you would rather have the banner and mouse back.
-            menu.Set("lightweight", JsonValue.Of(true));
+            // Off. Stripping the banner and the corner Scaleform was tried as a frame-rate fix
+            // and did not work, so the decoration is back; this is here for anyone who wants the
+            // plainest possible menu regardless.
+            menu.Set("lightweight", JsonValue.Of(false));
+            // "r,g,b" or "a,r,g,b".
+            menu.Set("bannerColour", JsonValue.Of("235,132,22,22"));
+            menu.Set("maxItems", JsonValue.Of(9));
+            menu.Set("width", JsonValue.Of(460));
             root.Set("menu", menu);
 
             JsonValue logging = JsonValue.NewObject();
@@ -296,7 +303,29 @@ namespace TonightsTheNight.Config
             air.Set("planeHeading", JsonValue.Of(-1));
             air.Set("planeMaxHeight", JsonValue.Of(260));
             air.Set("planeMinHeight", JsonValue.Of(160));
+            air.Set("searchlight", JsonValue.Of(true));
             features.Set("air", air);
+
+            // The city itself, rather than the people in it. A hundred people fighting on an
+            // otherwise normal street still looks like a normal street; the power being out and
+            // the roads being blocked is what reads as a riot from a rooftop.
+            JsonValue spectacle = JsonValue.NewObject();
+            spectacle.Set("blackout", JsonValue.Of(true));
+            spectacle.Set("barricades", JsonValue.Of(true));
+            spectacle.Set("maxBarricades", JsonValue.Of(5));
+            spectacle.Set("barricadeIntervalMs", JsonValue.Of(20000));
+            spectacle.Set("barricadeRadius", JsonValue.Of(150));
+            spectacle.Set("barricadeWidth", JsonValue.Of(5));
+            spectacle.Set("burningBarricades", JsonValue.Of(true));
+            spectacle.Set("burningChance", JsonValue.Of(0.7));
+            spectacle.Set("smoke", JsonValue.Of(true));
+            spectacle.Set("maxSmoke", JsonValue.Of(6));
+            spectacle.Set("smokeScale", JsonValue.Of(6));
+            // Particle assets stream like models. If the smoke never appears these are the two
+            // values to change - they are community-documented names, not official ones.
+            spectacle.Set("ptfxAsset", JsonValue.Of("core"));
+            spectacle.Set("ptfxName", JsonValue.Of("exp_grd_bzgas_smoke"));
+            features.Set("spectacle", spectacle);
 
             // Car chases. Provocation-driven: hurt someone and drive away, and their side
             // comes after you in a carload. Never touches the wanted system, so this can run

@@ -13,6 +13,12 @@ namespace TonightsTheNight.Core
         public bool Fires;
         public bool Looting;
 
+        /// <summary>The city's power fails from this phase on.</summary>
+        public bool Blackout;
+
+        /// <summary>Rioters start dragging things across the roads.</summary>
+        public bool Barricades;
+
         /// <summary>Kills that also advance to this phase, so a violent riot escalates faster.</summary>
         public int KillThreshold;
     }
@@ -67,6 +73,8 @@ namespace TonightsTheNight.Core
                     DurationSeconds = entry["durationSeconds"].AsInt(120),
                     Fires = entry["fires"].AsBool(false),
                     Looting = entry["looting"].AsBool(false),
+                    Blackout = entry["blackout"].AsBool(false),
+                    Barricades = entry["barricades"].AsBool(false),
                     KillThreshold = entry["killThreshold"].AsInt(0)
                 });
             }

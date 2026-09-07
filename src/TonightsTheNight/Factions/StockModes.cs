@@ -133,7 +133,7 @@ namespace TonightsTheNight.Factions
   ""escalation"": {
     ""phases"": [
       { ""name"": ""Turf Dispute"", ""durationSeconds"": 90 },
-      { ""name"": ""Open War"", ""durationSeconds"": 180, ""fires"": true, ""killThreshold"": 20 },
+      { ""name"": ""Open War"", ""durationSeconds"": 180, ""fires"": true, ""barricades"": true, ""killThreshold"": 20 },
       { ""name"": ""Nobody Left To Ask"", ""durationSeconds"": 0, ""fires"": true }
     ]
   },
@@ -238,8 +238,8 @@ namespace TonightsTheNight.Factions
   ""escalation"": {
     ""phases"": [
       { ""name"": ""Heavy Patrol"", ""durationSeconds"": 90 },
-      { ""name"": ""Crackdown"", ""durationSeconds"": 150, ""fires"": true, ""looting"": true, ""killThreshold"": 12 },
-      { ""name"": ""No Restraint"", ""durationSeconds"": 0, ""fires"": true, ""looting"": true }
+      { ""name"": ""Crackdown"", ""durationSeconds"": 150, ""fires"": true, ""looting"": true, ""barricades"": true, ""killThreshold"": 12 },
+      { ""name"": ""No Restraint"", ""durationSeconds"": 0, ""fires"": true, ""looting"": true, ""barricades"": true }
     ]
   },
 
@@ -340,8 +340,8 @@ namespace TonightsTheNight.Factions
   ""escalation"": {
     ""phases"": [
       { ""name"": ""Curfew"", ""durationSeconds"": 90 },
-      { ""name"": ""Deployment"", ""durationSeconds"": 180, ""fires"": true, ""killThreshold"": 15 },
-      { ""name"": ""Full Control"", ""durationSeconds"": 0, ""fires"": true, ""looting"": true }
+      { ""name"": ""Deployment"", ""durationSeconds"": 180, ""fires"": true, ""barricades"": true, ""killThreshold"": 15 },
+      { ""name"": ""Full Control"", ""durationSeconds"": 0, ""fires"": true, ""looting"": true, ""barricades"": true, ""blackout"": true }
     ]
   },
 
@@ -575,7 +575,7 @@ namespace TonightsTheNight.Factions
   ""escalation"": {
     ""phases"": [
       { ""name"": ""First Contact"", ""durationSeconds"": 75 },
-      { ""name"": ""Harvest"", ""durationSeconds"": 180, ""fires"": true, ""killThreshold"": 15 },
+      { ""name"": ""Harvest"", ""durationSeconds"": 180, ""fires"": true, ""blackout"": true, ""killThreshold"": 15 },
       { ""name"": ""Extermination"", ""durationSeconds"": 0, ""fires"": true }
     ]
   },
@@ -652,8 +652,8 @@ namespace TonightsTheNight.Factions
       // These add up to less than the purge window on purpose: the final phase runs until
       // the clock ends the mode, which is the event. Phases never stop it - the clock does.
       { ""name"": ""The Siren"", ""durationSeconds"": 120 },
-      { ""name"": ""Anything Goes"", ""durationSeconds"": 300, ""fires"": true, ""looting"": true, ""killThreshold"": 15 },
-      { ""name"": ""The Last Hour"", ""durationSeconds"": 0, ""fires"": true, ""looting"": true }
+      { ""name"": ""Anything Goes"", ""durationSeconds"": 300, ""fires"": true, ""looting"": true, ""barricades"": true, ""killThreshold"": 15 },
+      { ""name"": ""The Last Hour"", ""durationSeconds"": 0, ""fires"": true, ""looting"": true, ""barricades"": true, ""blackout"": true }
     ]
   },
 
@@ -719,8 +719,8 @@ namespace TonightsTheNight.Factions
   ""escalation"": {
     ""phases"": [
       { ""name"": ""Something Snaps"", ""durationSeconds"": 45 },
-      { ""name"": ""Free For All"", ""durationSeconds"": 180, ""fires"": true, ""looting"": true, ""killThreshold"": 10 },
-      { ""name"": ""Nobody Left"", ""durationSeconds"": 0, ""fires"": true, ""looting"": true }
+      { ""name"": ""Free For All"", ""durationSeconds"": 180, ""fires"": true, ""looting"": true, ""barricades"": true, ""killThreshold"": 10 },
+      { ""name"": ""Nobody Left"", ""durationSeconds"": 0, ""fires"": true, ""looting"": true, ""barricades"": true, ""blackout"": true }
     ]
   },
 
@@ -827,8 +827,8 @@ namespace TonightsTheNight.Factions
     ""phases"": [
       { ""name"": ""It Starts"", ""durationSeconds"": 60 },
       { ""name"": ""Response"", ""durationSeconds"": 120, ""fires"": true, ""killThreshold"": 15 },
-      { ""name"": ""Lockdown"", ""durationSeconds"": 150, ""fires"": true, ""looting"": true, ""killThreshold"": 40 },
-      { ""name"": ""Something Else Arrives"", ""durationSeconds"": 0, ""fires"": true }
+      { ""name"": ""Lockdown"", ""durationSeconds"": 150, ""fires"": true, ""looting"": true, ""barricades"": true, ""killThreshold"": 40 },
+      { ""name"": ""Something Else Arrives"", ""durationSeconds"": 0, ""fires"": true, ""looting"": true, ""barricades"": true, ""blackout"": true }
     ]
   },
 

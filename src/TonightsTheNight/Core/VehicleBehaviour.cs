@@ -97,6 +97,12 @@ namespace TonightsTheNight.Core
         {
             GTA.Math.Vector3 over = target.Position;
 
+            // A searchlight sweeping a blacked-out street is most of what a helicopter is for.
+            if (_config.GetBool("features.air.searchlight", true))
+            {
+                Function.Call(Hash.SET_VEHICLE_SEARCHLIGHT, vehicle, true, true);
+            }
+
             Function.Call(Hash.TASK_HELI_MISSION,
                 pilot, vehicle, 0, target,
                 over.X, over.Y, over.Z,

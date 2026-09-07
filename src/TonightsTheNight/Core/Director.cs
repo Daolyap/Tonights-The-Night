@@ -33,6 +33,7 @@ namespace TonightsTheNight.Core
         private readonly Reinforcements _reinforcements;
         private readonly SkyCraft _craft;
         private readonly Perception _perception;
+        private readonly Spectacle _spectacle;
 
         public Escalation Escalation { get; private set; }
         public RiotZone Zone { get; private set; }
@@ -44,6 +45,7 @@ namespace TonightsTheNight.Core
         public Reinforcements Reinforcements { get { return _reinforcements; } }
         public SkyCraft Craft { get { return _craft; } }
         public Perception Perception { get { return _perception; } }
+        public Spectacle Spectacle { get { return _spectacle; } }
 
         /// <summary>Recruits confirmed dead, as opposed to merely despawned. Drives escalation.</summary>
         public int Kills { get; private set; }
@@ -115,6 +117,7 @@ namespace TonightsTheNight.Core
             _vehicles = new VehicleBehaviour(config);
             _craft = new SkyCraft(config, _models, _random);
             _perception = new Perception(config, _random);
+            _spectacle = new Spectacle(config, _models, _random);
             _pursuit = new Pursuit(config, _random, _registry);
             _looting = new Looting(config, _models, _random, _registry);
 
@@ -160,6 +163,7 @@ namespace TonightsTheNight.Core
             _looting.Reset();
             _reinforcements.Reset();
             _craft.Reset();
+            _spectacle.Reset();
 
             ActiveMode = mode;
             Kills = 0;
@@ -202,6 +206,7 @@ namespace TonightsTheNight.Core
             Zone.Clear();
             Purge.Clear();
             _craft.Clear();
+            _spectacle.Clear();
             _models.Release();
 
             _relationships.Clear();
@@ -250,6 +255,7 @@ namespace TonightsTheNight.Core
                 Ambience.Clear();
                 Zone.Clear();
                 _craft.Clear();
+                _spectacle.Clear();
                 // Leaves the wanted ceiling at zero for the rest of the session if skipped,
                 // which would look exactly like the police mod having broken.
                 Purge.Clear();
@@ -304,6 +310,11 @@ namespace TonightsTheNight.Core
                 // Ships hold station whether or not you are reading a menu; they are two
                 // entity moves a quarter-second, and a fleet that freezes mid-air is worse.
                 _craft.Update(ActiveMode.Craft, Zone.Centre, true);
+
+                // The city's own state: the power, the roads, the smoke. Runs whether or not a
+                // menu is open, because a blackout that flickers back on while you read a
+                // slider is worse than no blackout.
+                _spectacle.Update(Zone.Centre, phase, unphased);
 
                 _perception.Update(_registry.Tracked);
                 if (_perception.Changed) { OnPerceptionChanged(); }
@@ -555,6 +566,8 @@ namespace TonightsTheNight.Core
                      ", recruited " + RecruitedTotal + ", lost " + LostTotal + ", kills " + Kills +
                      ", culled " + CulledTotal + ", vehicles " + _registry.VehicleCount +
                      ", fires " + Ambience.ActiveFires +
+                     ", barricades " + _spectacle.BarricadeCount +
+                     (_spectacle.BlackedOut ? ", blackout" : "") +
                      ", chases " + _pursuit.ActiveChases + "/" + _pursuit.Started +
                      ", reinforcement " + ReinforcementSummary() +
                      ", player " + (_perception.Spotted ? "spotted" : "unseen " + _perception.SecondsSinceSeen + "s") +

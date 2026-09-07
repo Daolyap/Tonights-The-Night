@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using LemonUI.Elements;
 using LemonUI;
 using LemonUI.Menus;
 using TonightsTheNight.Config;
@@ -81,41 +83,90 @@ namespace TonightsTheNight.Menu
 
         public void Toggle() { Visible = !Visible; }
 
-        public void Process() { _pool.Process(); }
+        /// <summary>Milliseconds the last menu draw took. Shown on the debug overlay.</summary>
+        public double LastDrawMs { get; private set; }
+
+        public void Process()
+        {
+            // Measured because two attempts at fixing the frame rate have now been guesses. If
+            // this reads 0.2ms while the frame rate is halved, the cost is not the menu.
+            _stopwatch.Restart();
+            _pool.Process();
+            _stopwatch.Stop();
+            LastDrawMs = _stopwatch.Elapsed.TotalMilliseconds;
+        }
+
+        private readonly System.Diagnostics.Stopwatch _stopwatch = new System.Diagnostics.Stopwatch();
 
         /// <summary>
-        /// Strips the parts of a LemonUI menu that cost the most to draw.
+        /// The mod's look, applied to every menu.
         ///
-        /// The instructional buttons in the corner are a Scaleform, which is one of the more
-        /// expensive things a script can put on screen, and LemonUI redraws it every frame the
-        /// menu is open. The banner is a texture draw on top of that, and mouse support plus
-        /// edge-of-screen camera rotation both do work per frame whether or not you own a mouse.
-        ///
-        /// None of it is load-bearing: the menu keeps its title, its items and its descriptions.
-        /// Turn it off with menu.lightweight if you would rather have the banner back.
+        /// An earlier version stripped the banner, the corner buttons and mouse support on the
+        /// theory that the Scaleform was what halved the frame rate. It was not - the lag
+        /// survived all of it - so the decoration is back and this is where the styling lives
+        /// instead. If you want the bare version, menu.lightweight still does it.
         /// </summary>
-        private void Economise(NativeMenu menu)
+        private void Style(NativeMenu menu)
         {
-            if (!_config.GetBool("menu.lightweight", true)) { return; }
-
             try
             {
-                menu.Banner = null;
-                menu.Buttons.Clear();
-                menu.MouseBehavior = MenuMouseBehavior.Disabled;
-                menu.RotateCamera = false;
+                if (_config.GetBool("menu.lightweight", false))
+                {
+                    menu.Banner = null;
+                    menu.Buttons.Clear();
+                    menu.MouseBehavior = MenuMouseBehavior.Disabled;
+                    menu.RotateCamera = false;
+                    return;
+                }
+
+                // A flat colour banner rather than the stock texture: no art to ship, and a
+                // riot mod should not open in Franchise blue.
+                menu.Banner = new ScaledRectangle(PointF.Empty, SizeF.Empty)
+                {
+                    Color = Colour("menu.bannerColour", Color.FromArgb(235, 132, 22, 22))
+                };
+
+                if (menu.BannerText != null) { menu.BannerText.Font = GTA.UI.Font.HouseScript; }
+                menu.NameFont = GTA.UI.Font.ChaletComprimeCologne;
+                menu.DescriptionFont = GTA.UI.Font.ChaletLondon;
+
+                menu.ItemCount = CountVisibility.Always;
+                menu.MaxItems = Math.Max(4, _config.GetInt("menu.maxItems", 9));
+                menu.Width = Math.Max(300f, _config.GetFloat("menu.width", 460f));
             }
             catch (Exception ex)
             {
-                Log.Error("Could not apply the lightweight menu settings", ex);
+                Log.Error("Could not style a menu", ex);
             }
+        }
+
+        /// <summary>Reads "r,g,b" or "a,r,g,b" from config, falling back to the shipped colour.</summary>
+        private Color Colour(string path, Color fallback)
+        {
+            string text = _config.GetString(path, null);
+            if (string.IsNullOrEmpty(text)) { return fallback; }
+
+            string[] parts = text.Split(',');
+            var values = new int[parts.Length];
+
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!int.TryParse(parts[i].Trim(), out values[i])) { return fallback; }
+                if (values[i] < 0 || values[i] > 255) { return fallback; }
+            }
+
+            if (values.Length == 3) { return Color.FromArgb(255, values[0], values[1], values[2]); }
+            if (values.Length == 4) { return Color.FromArgb(values[0], values[1], values[2], values[3]); }
+
+            Log.Warn("Colour '" + text + "' needs three or four numbers. Using the default.");
+            return fallback;
         }
 
         private void Build()
         {
             _root = new NativeMenu("Tonight's The Night", "RIOT CONTROL");
             _pool.Add(_root);
-            Economise(_root);
+            Style(_root);
 
             BuildModeMenu();
             BuildTuningMenu();
@@ -169,7 +220,7 @@ namespace TonightsTheNight.Menu
         /// </summary>
         private NativeSubmenuItem AddSubMenu(NativeMenu submenu, string title, string description)
         {
-            Economise(submenu);
+            Style(submenu);
             NativeSubmenuItem item = _root.AddSubMenu(submenu);
             item.Title = title;
             item.Description = description;
@@ -489,15 +540,29 @@ namespace TonightsTheNight.Menu
                 "All crime is legal, so the game's own police lose interest. Your wanted ceiling is " +
                 "put back exactly as it was when the purge ends.");
 
+            AddToggle(_featuresMenu, "Blackout", "features.spectacle.blackout", true,
+                "The city's power fails in the late phases. Street lights, shop signs and windows, "
+                + "the whole map. At night the difference is total.");
+
+            AddToggle(_featuresMenu, "Barricades", "features.spectacle.barricades", true,
+                "Rioters drag street furniture across the roads and set it alight. Cars can still "
+                + "smash through - that is the point of them being props rather than walls.");
+
+            AddToggle(_featuresMenu, "Smoke Columns", "features.spectacle.smoke", true,
+                "Smoke rising off the burning barricades, visible from the other side of the map.");
+
+            AddToggle(_featuresMenu, "Helicopter Searchlights", "features.air.searchlight", true,
+                "Sweeping a blacked-out street is most of what a helicopter is for.");
+
             AddToggle(_featuresMenu, "Reinforcements", "features.reinforcements.enabled", true,
                 "Factions that take losses send bigger waves, sooner. Off: the response never grows.");
 
             AddToggle(_featuresMenu, "Craft Overhead", "features.craft.enabled", true,
                 "Ships in the sky during Invasion, with aliens arriving underneath them.");
 
-            AddToggle(_featuresMenu, "Lightweight Menu", "menu.lightweight", true,
-                "Drops this menu's banner, corner buttons and mouse support. The corner buttons are a "
-                + "Scaleform redrawn every frame, which is the expensive part. Turn off for the full look.");
+            AddToggle(_featuresMenu, "Bare Menu", "menu.lightweight", false,
+                "Drops the banner, corner buttons and mouse support. Tested and it did not fix the "
+                + "frame rate, so it is off - but it is here if you want the plainest possible menu.");
 
             AddToggle(_featuresMenu, "Spawn Factions", "riot.spawnFactions", true,
                 "Off: only ambient pedestrians are used. No police, military, aliens or animals.");
