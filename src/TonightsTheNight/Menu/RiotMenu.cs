@@ -238,10 +238,10 @@ namespace TonightsTheNight.Menu
                 "On: break line of sight and they lose you, then go back to fighting each other. "
                 + "Off: everyone hostile knows where you are at all times, through walls.");
 
-            AddRangeSlider(_tuningMenu, "How Far They See", "features.perception.sightRange", 60, 20, 150, 10,
+            AddRangeSlider(_tuningMenu, "How Far They See", "features.perception.sightRange", 140, 40, 300, 20,
                 "How far a rioter can pick you out. Crouching and cover shorten it.");
 
-            AddRangeSlider(_tuningMenu, "How Long They Search", "features.perception.forgetSeconds", 12, 3, 60, 3,
+            AddRangeSlider(_tuningMenu, "How Long They Search", "features.perception.forgetSeconds", 20, 3, 60, 3,
                 "Seconds they keep hunting after losing sight of you.");
 
             AddToggle(_tuningMenu, "Never Flee", "combat.neverFlee", true,

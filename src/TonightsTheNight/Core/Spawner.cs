@@ -141,10 +141,10 @@ namespace TonightsTheNight.Core
 
             for (int i = 0; i < size; i++)
             {
-                Vector3 point = PickPoint(anchor, faction.Spawn, false);
-                if (point == Vector3.Zero) { continue; }
+                SpawnPoint point = PickPoint(anchor, faction.Spawn, false);
+                if (!point.Valid) { continue; }
 
-                Ped ped = World.CreatePed(model, point);
+                Ped ped = World.CreatePed(model, point.Position);
                 if (ped == null || !ped.Exists()) { continue; }
 
                 Prepare(ped, faction);
@@ -166,15 +166,17 @@ namespace TonightsTheNight.Core
             bool air = string.Equals(faction.Spawn.VehicleType, "air", StringComparison.OrdinalIgnoreCase);
             bool water = string.Equals(faction.Spawn.VehicleType, "water", StringComparison.OrdinalIgnoreCase);
 
-            Vector3 point = air ? PickAirPoint(anchor, faction.Spawn)
-                          : water ? PickWaterPoint(anchor, faction.Spawn)
-                          : PickPoint(anchor, faction.Spawn, true);
+            SpawnPoint point = air ? PickAirPoint(anchor, faction.Spawn)
+                             : water ? PickWaterPoint(anchor, faction.Spawn)
+                             : PickPoint(anchor, faction.Spawn, true);
 
             // No river within reach is the normal case for most of Los Santos, so a failed water
             // spawn is a shrug rather than a problem.
-            if (point == Vector3.Zero) { return; }
+            if (!point.Valid) { return; }
 
-            Vehicle vehicle = World.CreateVehicle(vehicleModel, point, (float)(_random.NextDouble() * 360.0));
+            // The road's own heading, not a random one. A random heading is how cars ended up
+            // across the carriageway facing a wall.
+            Vehicle vehicle = World.CreateVehicle(vehicleModel, point.Position, point.Heading);
             if (vehicle == null || !vehicle.Exists()) { return; }
 
             // Where this vehicle's own occupants start in the shared list, so an empty vehicle
@@ -200,7 +202,7 @@ namespace TonightsTheNight.Core
 
             for (int seat = 0; seat < seats; seat++)
             {
-                Ped ped = World.CreatePed(pedModel, point);
+                Ped ped = World.CreatePed(pedModel, point.Position);
                 if (ped == null || !ped.Exists()) { continue; }
 
                 Prepare(ped, faction);
@@ -251,23 +253,28 @@ namespace TonightsTheNight.Core
         /// Above and to one side of the riot. Helicopters need clear air rather than navmesh, so
         /// this skips the ground checks entirely.
         /// </summary>
-        private Vector3 PickAirPoint(Vector3 anchor, SpawnProfile profile)
+        private SpawnPoint PickAirPoint(Vector3 anchor, SpawnProfile profile)
         {
             double angle = _random.NextDouble() * Math.PI * 2.0;
             float distance = profile.MinDistance +
                              (float)_random.NextDouble() * Math.Max(1f, profile.MaxDistance - profile.MinDistance);
 
-            return new Vector3(
-                anchor.X + (float)Math.Cos(angle) * distance,
-                anchor.Y + (float)Math.Sin(angle) * distance,
-                anchor.Z + profile.FlightHeight);
+            return new SpawnPoint
+            {
+                Position = new Vector3(
+                    anchor.X + (float)Math.Cos(angle) * distance,
+                    anchor.Y + (float)Math.Sin(angle) * distance,
+                    anchor.Z + profile.FlightHeight),
+                // Nose pointed at the riot, so it flies in rather than away from it.
+                Heading = (float)((angle * 180.0 / Math.PI) + 180.0)
+            };
         }
 
         /// <summary>
         /// A point on actual water, or nowhere. Most of Los Santos is not near any, so callers
         /// treat failure as "no boats this wave" rather than as an error.
         /// </summary>
-        private Vector3 PickWaterPoint(Vector3 anchor, SpawnProfile profile)
+        private SpawnPoint PickWaterPoint(Vector3 anchor, SpawnProfile profile)
         {
             for (int attempt = 0; attempt < 10; attempt++)
             {
@@ -284,37 +291,123 @@ namespace TonightsTheNight.Core
                 float surface = height.GetResult<float>();
                 if (surface <= 0f) { continue; }
 
-                return new Vector3(x, y, surface);
+                return new SpawnPoint
+                {
+                    Position = new Vector3(x, y, surface),
+                    Heading = (float)(_random.NextDouble() * 360.0)
+                };
             }
 
-            return Vector3.Zero;
+            return SpawnPoint.None;
+        }
+        /// <summary>Where and which way round something arrives.</summary>
+        private struct SpawnPoint
+        {
+            public Vector3 Position;
+            public float Heading;
+
+            public bool Valid { get { return Position != Vector3.Zero; } }
+
+            public static SpawnPoint None { get { return new SpawnPoint(); } }
         }
 
         /// <summary>
-        /// A point at a plausible distance, on a road for vehicles and on navmesh for people.
-        /// Vector3.Zero means "nowhere sensible", which callers treat as skip-this-one.
+        /// A place to arrive from, chosen the way the game's own dispatch does it: on a road,
+        /// pointing along the road, and out of sight.
+        ///
+        /// The previous version picked a bearing and a distance and dropped whatever it was
+        /// making straight onto it. That put units in the middle of the street in front of you,
+        /// and gave every vehicle a random heading - so cars materialised sideways across the
+        /// carriageway facing a wall, which is most of why arrivals never looked like arrivals.
         /// </summary>
-        private Vector3 PickPoint(Vector3 anchor, SpawnProfile profile, bool onRoad)
+        private SpawnPoint PickPoint(Vector3 anchor, SpawnProfile profile, bool onRoad)
         {
-            for (int attempt = 0; attempt < 6; attempt++)
+            int attempts = Math.Max(1, _config.GetInt("spawn.attempts", 14));
+            bool offscreen = _config.GetBool("spawn.offscreenOnly", true);
+            float visibility = _config.GetFloat("spawn.visibilityRadius", 4f);
+
+            // A faction with vehicles has distances written for driving in. Somebody arriving on
+            // foot at the same range would still be walking when the riot ended, so those - and
+            // only those - are brought in closer.
+            float scale = !onRoad && profile.Vehicles.Count > 0
+                ? _config.GetFloat("spawn.footDistanceFactor", 0.45f)
+                : 1f;
+
+            float minDistance = profile.MinDistance * scale;
+            float span = Math.Max(1f, profile.MaxDistance * scale - minDistance);
+
+            SpawnPoint fallback = SpawnPoint.None;
+
+            for (int attempt = 0; attempt < attempts; attempt++)
             {
                 double angle = _random.NextDouble() * Math.PI * 2.0;
-                float distance = profile.MinDistance +
-                                 (float)_random.NextDouble() * Math.Max(1f, profile.MaxDistance - profile.MinDistance);
+                float distance = minDistance + (float)_random.NextDouble() * span;
 
                 var candidate = new Vector3(
                     anchor.X + (float)Math.Cos(angle) * distance,
                     anchor.Y + (float)Math.Sin(angle) * distance,
                     anchor.Z);
 
-                Vector3 placed = onRoad
-                    ? World.GetNextPositionOnStreet(candidate)
-                    : World.GetSafeCoordForPed(candidate);
+                SpawnPoint placed = onRoad ? OnRoad(candidate) : OnFoot(candidate);
+                if (!placed.Valid) { continue; }
 
-                if (placed != Vector3.Zero) { return placed; }
+                // Keep the first workable point whatever happens: somewhere visible beats
+                // nowhere at all, and on an open hillside every point is visible.
+                if (!fallback.Valid) { fallback = placed; }
+
+                if (!offscreen) { return placed; }
+
+                if (!Function.Call<bool>(Hash.IS_SPHERE_VISIBLE,
+                        placed.Position.X, placed.Position.Y, placed.Position.Z, visibility))
+                {
+                    return placed;
+                }
             }
 
-            return Vector3.Zero;
+            return fallback;
+        }
+
+        /// <summary>
+        /// The nearest road node and the direction traffic runs on it, so a car arrives facing
+        /// down its own lane rather than across it.
+        /// </summary>
+        private static SpawnPoint OnRoad(Vector3 candidate)
+        {
+            try
+            {
+                var position = new OutputArgument();
+                var heading = new OutputArgument();
+
+                bool found = Function.Call<bool>(Hash.GET_CLOSEST_VEHICLE_NODE_WITH_HEADING,
+                    candidate.X, candidate.Y, candidate.Z, position, heading, 1, 3f, 0);
+
+                if (found)
+                {
+                    return new SpawnPoint
+                    {
+                        Position = position.GetResult<Vector3>(),
+                        Heading = heading.GetResult<float>()
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not query a road node", ex);
+            }
+
+            // No node within reach - the old behaviour rather than not arriving at all.
+            Vector3 street = World.GetNextPositionOnStreet(candidate);
+            return street == Vector3.Zero
+                ? SpawnPoint.None
+                : new SpawnPoint { Position = street, Heading = 0f };
+        }
+
+        private static SpawnPoint OnFoot(Vector3 candidate)
+        {
+            Vector3 safe = World.GetSafeCoordForPed(candidate);
+            return safe == Vector3.Zero
+                ? SpawnPoint.None
+                : new SpawnPoint { Position = safe, Heading = 0f };
         }
     }
 }

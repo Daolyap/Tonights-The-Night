@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.6.1";
+        public const string Version = "0.7.0";
 
         public static JsonValue Build()
         {
@@ -146,6 +146,19 @@ namespace TonightsTheNight.Config
             vehicles.Set("driverAbility", JsonValue.Of(0.8));
             vehicles.Set("drivingStyle", JsonValue.Of(786603));
             root.Set("vehicles", vehicles);
+
+            // How arrivals are placed. Modelled on the game's own dispatch: on a road, facing
+            // along it, out of your view, and far enough out that they drive in rather than
+            // materialise in front of you.
+            JsonValue spawn = JsonValue.NewObject();
+            spawn.Set("offscreenOnly", JsonValue.Of(true));
+            // Radius of the sphere tested against the camera. Bigger is stricter.
+            spawn.Set("visibilityRadius", JsonValue.Of(4));
+            // Points tried before settling for a visible one. Somewhere visible beats nowhere.
+            spawn.Set("attempts", JsonValue.Of(14));
+            // Applied to the distance when a faction that normally drives has to walk in.
+            spawn.Set("footDistanceFactor", JsonValue.Of(0.45));
+            root.Set("spawn", spawn);
 
             JsonValue blips = JsonValue.NewObject();
             blips.Set("enabled", JsonValue.Of(true));
@@ -364,13 +377,24 @@ namespace TonightsTheNight.Config
             // sight, stay quiet, and they go back to fighting the people they can see.
             JsonValue perception = JsonValue.NewObject();
             perception.Set("enabled", JsonValue.Of(true));
-            perception.Set("sightRange", JsonValue.Of(60));
+            // Generous on purpose. The point of this feature is to stop them knowing where you
+            // are through a wall, not to make them blind: at 60 the police spawned outside their
+            // own sight range, drove the whole way in while the player read as unseen, and
+            // arrived neutral - which is to say they did not shoot.
+            perception.Set("sightRange", JsonValue.Of(140));
+            // Inside this, line of sight is not asked. Somebody beside you knows you are there.
+            perception.Set("closeRange", JsonValue.Of(30));
+            // A car is loud and large, so it widens that.
+            perception.Set("vehicleFactor", JsonValue.Of(1.8));
+            // Flags for HAS_ENTITY_CLEAR_LOS_TO_ENTITY. 4 is the map only, so a car bonnet or a
+            // bin does not count as concealment; 17 also counts vehicles and objects.
+            perception.Set("losFlags", JsonValue.Of(4));
             // How long they keep looking after losing sight of you.
-            perception.Set("forgetSeconds", JsonValue.Of(12));
+            perception.Set("forgetSeconds", JsonValue.Of(20));
             perception.Set("checkIntervalMs", JsonValue.Of(400));
             // Line-of-sight traces are the expensive part, so only this many per check. The
             // round-robin covers the whole crowd over a couple of seconds anyway.
-            perception.Set("samplesPerCheck", JsonValue.Of(6));
+            perception.Set("samplesPerCheck", JsonValue.Of(10));
             // Firing a weapon gives you away through walls, as it should.
             perception.Set("gunfireGivesYouAway", JsonValue.Of(true));
             // Crouching or taking cover multiplies their sight range by this.

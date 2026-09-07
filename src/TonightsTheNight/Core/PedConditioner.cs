@@ -27,6 +27,7 @@ namespace TonightsTheNight.Core
         private readonly Dictionary<string, uint> _weaponCache = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
 
         private readonly HashSet<string> _reportedBadWeapons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _reportedEmptyHanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public PedConditioner(ConfigStore config, RelationshipMatrix relationships, Random random)
         {
@@ -140,13 +141,61 @@ namespace TonightsTheNight.Core
             if (table.Count == 0) { return; }
             if (_random.NextDouble() > armedChance) { return; }
 
-            string name = table.Pick(_random);
-            if (name == null) { return; }
+            // Try the pick, then the rest of the table, then a weapon every install has.
+            // A ped that ends up empty-handed is invisible as a bug - it just stands there
+            // looking like the mod does nothing - so it is worth several attempts and a log
+            // line naming the weapon that would not take.
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                if (TryArm(ped, table.Pick(_random), ammo)) { return; }
+            }
+
+            if (TryArm(ped, "WEAPON_PISTOL", ammo)) { return; }
+
+            if (_reportedEmptyHanded.Add(faction.Id))
+            {
+                Log.Warn("Faction '" + faction.Id + "' could not be armed from its own loadout " +
+                         "or the fallback. Its members will fight unarmed.");
+            }
+        }
+
+        /// <summary>
+        /// Gives a weapon and confirms the ped actually has it.
+        ///
+        /// GIVE_WEAPON_TO_PED reports nothing, so a name that resolves to a valid hash the ped
+        /// cannot hold left the ped empty-handed silently. Checking afterwards is what turns
+        /// "most of them have no weapon" into a line in the log naming the weapon.
+        /// </summary>
+        private bool TryArm(Ped ped, string name, int ammo)
+        {
+            if (name == null) { return false; }
 
             uint hash = ResolveWeapon(name);
-            if (hash == 0) { return; }
+            if (hash == 0) { return false; }
 
-            Function.Call(Hash.GIVE_WEAPON_TO_PED, ped, hash, ammo, false, true);
+            try
+            {
+                Function.Call(Hash.GIVE_WEAPON_TO_PED, ped, hash, ammo, false, true);
+
+                if (!Function.Call<bool>(Hash.HAS_PED_GOT_WEAPON, ped, hash, false))
+                {
+                    if (_reportedBadWeapons.Add(name))
+                    {
+                        Log.Warn("'" + name + "' resolved but would not attach to a ped - skipping it.");
+                    }
+                    return false;
+                }
+
+                // Put it in their hands rather than leaving it holstered, or a faction that is
+                // waiting for a target reads as unarmed until the moment it finds one.
+                Function.Call(Hash.SET_CURRENT_PED_WEAPON, ped, hash, true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not arm a ped with '" + name + "'", ex);
+                return false;
+            }
         }
 
         /// <summary>

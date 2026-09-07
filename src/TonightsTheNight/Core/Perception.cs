@@ -25,8 +25,6 @@ namespace TonightsTheNight.Core
     /// </summary>
     public sealed class Perception
     {
-        /// <summary>Trace flags for the line-of-sight check: world, vehicles and objects.</summary>
-        private const int LosTraceType = 17;
 
         private readonly ConfigStore _config;
         private readonly Random _random;
@@ -152,7 +150,16 @@ namespace TonightsTheNight.Core
             float range = SeeingRange(player);
             float rangeSquared = range * range;
 
+            // Inside this, line of sight is not the question. Somebody standing next to you
+            // knows you are there whether or not a raycast agrees, and the alternative - police
+            // driving up and staying neutral because the trace clipped their own bonnet - is
+            // what "the police will not shoot me" actually was.
+            float closeRange = _config.GetFloat("features.perception.closeRange", 30f);
+            if (player.IsInVehicle()) { closeRange *= _config.GetFloat("features.perception.vehicleFactor", 1.8f); }
+            float closeSquared = closeRange * closeRange;
+
             bool requireFacing = _config.GetBool("features.perception.requireFacing", false);
+            int losFlags = _config.GetInt("features.perception.losFlags", 4);
             int samples = Math.Max(1, _config.GetInt("features.perception.samplesPerCheck", 6));
             int examined = 0;
             int walked = 0;
@@ -169,15 +176,29 @@ namespace TonightsTheNight.Core
                 if (entry.Reaction != Reaction.Fight) { continue; }
                 if (!_hostile.Contains(entry.Faction.Id)) { continue; }
 
-                if (player.Position.DistanceToSquared(entry.Ped.Position) > rangeSquared) { continue; }
+                float distance = player.Position.DistanceToSquared(entry.Ped.Position);
+                if (distance > rangeSquared) { continue; }
 
                 examined++;
 
                 try
                 {
+                    // Already shooting at you is not a question of sight.
+                    if (entry.Ped.IsInCombat && IsFightingPlayer(entry.Ped, player))
+                    {
+                        _cursor = (_cursor + offset) % tracked.Count;
+                        return entry.Faction.DisplayName + " are engaging you";
+                    }
+
+                    if (distance <= closeSquared)
+                    {
+                        _cursor = (_cursor + offset) % tracked.Count;
+                        return entry.Faction.DisplayName + " are right on top of you";
+                    }
+
                     bool sees = requireFacing
                         ? Function.Call<bool>(Hash.HAS_ENTITY_CLEAR_LOS_TO_ENTITY_IN_FRONT, entry.Ped, player)
-                        : Function.Call<bool>(Hash.HAS_ENTITY_CLEAR_LOS_TO_ENTITY, entry.Ped, player, LosTraceType);
+                        : Function.Call<bool>(Hash.HAS_ENTITY_CLEAR_LOS_TO_ENTITY, entry.Ped, player, losFlags);
 
                     if (sees)
                     {
@@ -199,13 +220,25 @@ namespace TonightsTheNight.Core
             return null;
         }
 
+        private static bool IsFightingPlayer(Ped ped, Ped player)
+        {
+            try
+            {
+                return Function.Call<int>(Hash.GET_PED_TARGET_FROM_COMBAT_PED, ped, 0) == player.Handle;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         /// <summary>
         /// How far they can pick you out. Crouching and cover shorten it; sitting in a car under
         /// a streetlight does not.
         /// </summary>
         private float SeeingRange(Ped player)
         {
-            float range = _config.GetFloat("features.perception.sightRange", 60f);
+            float range = _config.GetFloat("features.perception.sightRange", 140f);
 
             try
             {

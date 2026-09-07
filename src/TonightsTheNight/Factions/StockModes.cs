@@ -149,7 +149,7 @@ namespace TonightsTheNight.Factions
       ""spawn"": {
         ""models"": [ ""g_m_y_ballasout_01"", ""g_m_y_ballaeast_01"", ""g_f_y_ballas_01"" ],
         ""vehicles"": [ ""manana"", ""buccaneer"", ""tornado"" ],
-        ""maxAlive"": 20, ""perWave"": 5, ""waveIntervalMs"": 10000, ""inVehicleChance"": 0.5, ""occupants"": 4, ""vehiclesPerWave"": 2
+        ""maxAlive"": 20, ""perWave"": 5, ""waveIntervalMs"": 10000, ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 0.8, ""occupants"": 4, ""vehiclesPerWave"": 2
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Purple"" }
     },
@@ -164,7 +164,7 @@ namespace TonightsTheNight.Factions
       ""spawn"": {
         ""models"": [ ""g_m_y_famca_01"", ""g_m_y_famfor_01"", ""g_f_y_families_01"" ],
         ""vehicles"": [ ""peyote"", ""tornado"", ""emperor"" ],
-        ""maxAlive"": 20, ""perWave"": 5, ""waveIntervalMs"": 10000, ""inVehicleChance"": 0.5, ""occupants"": 4, ""vehiclesPerWave"": 2
+        ""maxAlive"": 20, ""perWave"": 5, ""waveIntervalMs"": 10000, ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 0.8, ""occupants"": 4, ""vehiclesPerWave"": 2
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Green"" }
     },
@@ -179,7 +179,7 @@ namespace TonightsTheNight.Factions
       ""spawn"": {
         ""models"": [ ""g_m_y_mexgoon_01"", ""g_m_y_mexgoon_02"", ""g_m_y_mexgang_01"" ],
         ""vehicles"": [ ""vamos"", ""chino"", ""tornado"" ],
-        ""maxAlive"": 18, ""perWave"": 5, ""waveIntervalMs"": 12000, ""inVehicleChance"": 0.5, ""occupants"": 4, ""vehiclesPerWave"": 2
+        ""maxAlive"": 18, ""perWave"": 5, ""waveIntervalMs"": 12000, ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 0.8, ""occupants"": 4, ""vehiclesPerWave"": 2
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Yellow"" }
     },
@@ -194,7 +194,7 @@ namespace TonightsTheNight.Factions
       ""spawn"": {
         ""models"": [ ""g_m_y_lost_01"", ""g_m_y_lost_02"", ""g_m_y_lost_03"" ],
         ""vehicles"": [ ""daemon"", ""hexer"", ""gburrito2"" ],
-        ""maxAlive"": 12, ""perWave"": 3, ""waveIntervalMs"": 18000, ""inVehicleChance"": 0.5, ""occupants"": 2
+        ""maxAlive"": 12, ""perWave"": 3, ""waveIntervalMs"": 18000, ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 0.8, ""occupants"": 2
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Orange"" }
     },
@@ -258,7 +258,7 @@ namespace TonightsTheNight.Factions
         // Two cars of four every eight seconds, up to twenty-six on the street. A couple of
         // officers trickling in does not read as a police state.
         ""maxAlive"": 26, ""perWave"": 4, ""waveIntervalMs"": 8000,
-        ""inVehicleChance"": 0.85, ""occupants"": 4, ""vehiclesPerWave"": 2,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 2,
         ""siren"": true, ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""PoliceOfficer"", ""colour"": ""Blue"" }
@@ -277,7 +277,7 @@ namespace TonightsTheNight.Factions
         // A riot van arrives with a van's worth of people in it.
         ""vehicles"": [ ""riot"", ""fbi2"", ""police4"" ],
         ""maxAlive"": 20, ""perWave"": 6, ""waveIntervalMs"": 13000,
-        ""inVehicleChance"": 0.95, ""occupants"": 6, ""vehiclesPerWave"": 2,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 6, ""vehiclesPerWave"": 2,
         ""siren"": true, ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""BlueDark"" }
@@ -359,7 +359,7 @@ namespace TonightsTheNight.Factions
         ""models"": [ ""s_m_y_cop_01"", ""s_f_y_cop_01"", ""s_m_y_swat_01"" ],
         ""vehicles"": [ ""police"", ""police3"", ""riot"", ""sheriff"" ],
         ""maxAlive"": 18, ""perWave"": 4, ""waveIntervalMs"": 10000,
-        ""inVehicleChance"": 0.85, ""occupants"": 4, ""vehiclesPerWave"": 2,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 2,
         ""siren"": true, ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""PoliceOfficer"", ""colour"": ""Blue"" }
@@ -378,7 +378,7 @@ namespace TonightsTheNight.Factions
         // A troop carrier arrives carrying troops. Two of them, six each, every nine seconds.
         ""vehicles"": [ ""barracks"", ""barracks2"", ""crusader"" ],
         ""maxAlive"": 32, ""perWave"": 6, ""waveIntervalMs"": 9000,
-        ""inVehicleChance"": 0.8, ""occupants"": 6, ""vehiclesPerWave"": 2,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 6, ""vehiclesPerWave"": 2,
         ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Green"" }
@@ -393,7 +393,7 @@ namespace TonightsTheNight.Factions
         ""models"": [ ""s_m_y_marine_02"", ""s_m_y_blackops_01"", ""s_m_m_armoured_01"" ],
         ""vehicles"": [ ""rhino"", ""insurgent"", ""insurgent2"", ""barracks2"" ],
         ""maxAlive"": 14, ""perWave"": 4, ""waveIntervalMs"": 16000,
-        ""inVehicleChance"": 1.0, ""occupants"": 4, ""vehiclesPerWave"": 2,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 2,
         ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""GreenDark"" }
@@ -590,7 +590,7 @@ namespace TonightsTheNight.Factions
       ],
       ""spawn"": {
         ""models"": [ ""s_m_m_movalien_01"" ],
-        ""maxAlive"": 24, ""perWave"": 5, ""waveIntervalMs"": 9000, ""minDistance"": 50, ""maxDistance"": 120
+        ""maxAlive"": 24, ""perWave"": 5, ""waveIntervalMs"": 9000, ""minDistance"": 15, ""maxDistance"": 45
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Green"" }
     },
@@ -605,7 +605,7 @@ namespace TonightsTheNight.Factions
       ],
       ""spawn"": {
         ""models"": [ ""s_m_m_movalien_01"" ],
-        ""maxAlive"": 14, ""perWave"": 4, ""waveIntervalMs"": 14000, ""minDistance"": 50, ""maxDistance"": 120
+        ""maxAlive"": 14, ""perWave"": 4, ""waveIntervalMs"": 14000, ""minDistance"": 15, ""maxDistance"": 45
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""GreenDark"" }
     },
@@ -680,7 +680,7 @@ namespace TonightsTheNight.Factions
       ""spawn"": {
         ""models"": [ ""g_m_y_lost_01"", ""g_m_y_ballasout_01"", ""g_m_y_mexgoon_01"", ""g_m_y_famca_01"" ],
         ""vehicles"": [ ""gburrito2"", ""manana"", ""chino"" ],
-        ""maxAlive"": 22, ""perWave"": 5, ""waveIntervalMs"": 11000, ""inVehicleChance"": 0.6, ""occupants"": 5, ""vehiclesPerWave"": 2
+        ""maxAlive"": 22, ""perWave"": 5, ""waveIntervalMs"": 11000, ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 0.9, ""occupants"": 5, ""vehiclesPerWave"": 2
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Orange"" }
     },
@@ -786,7 +786,7 @@ namespace TonightsTheNight.Factions
         ""models"": [ ""s_m_y_cop_01"", ""s_f_y_cop_01"", ""s_m_y_swat_01"" ],
         ""vehicles"": [ ""police"", ""police2"", ""police3"", ""riot"" ],
         ""maxAlive"": 20, ""perWave"": 4, ""waveIntervalMs"": 10000,
-        ""inVehicleChance"": 0.85, ""occupants"": 4, ""vehiclesPerWave"": 2,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 2,
         ""siren"": true, ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""PoliceOfficer"", ""colour"": ""Blue"" }
@@ -851,7 +851,7 @@ namespace TonightsTheNight.Factions
       ""spawn"": {
         ""models"": [ ""g_m_y_ballasout_01"", ""g_m_y_famca_01"", ""g_m_y_mexgoon_01"", ""g_m_y_lost_01"" ],
         ""vehicles"": [ ""manana"", ""peyote"", ""gburrito2"" ],
-        ""maxAlive"": 16, ""perWave"": 4, ""waveIntervalMs"": 13000, ""inVehicleChance"": 0.45, ""occupants"": 4, ""vehiclesPerWave"": 2
+        ""maxAlive"": 16, ""perWave"": 4, ""waveIntervalMs"": 13000, ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 0.75, ""occupants"": 4, ""vehiclesPerWave"": 2
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Purple"" }
     },
@@ -864,7 +864,7 @@ namespace TonightsTheNight.Factions
         ""models"": [ ""s_m_y_cop_01"", ""s_f_y_cop_01"", ""s_m_y_swat_01"" ],
         ""vehicles"": [ ""police"", ""police2"", ""riot"" ],
         ""maxAlive"": 18, ""perWave"": 4, ""waveIntervalMs"": 10000,
-        ""inVehicleChance"": 0.85, ""occupants"": 4, ""vehiclesPerWave"": 2, ""siren"": true, ""driveThroughCrowds"": true
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 2, ""siren"": true, ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""PoliceOfficer"", ""colour"": ""Blue"" }
     },
@@ -877,7 +877,7 @@ namespace TonightsTheNight.Factions
         ""models"": [ ""s_m_y_marine_01"", ""s_m_y_marine_02"", ""s_m_y_blackops_01"" ],
         ""vehicles"": [ ""barracks"", ""crusader"", ""insurgent"" ],
         ""maxAlive"": 20, ""perWave"": 5, ""waveIntervalMs"": 12000,
-        ""inVehicleChance"": 0.75, ""occupants"": 6, ""vehiclesPerWave"": 2, ""driveThroughCrowds"": true
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 6, ""vehiclesPerWave"": 2, ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Green"" }
     },

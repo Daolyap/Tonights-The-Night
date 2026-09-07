@@ -6,7 +6,7 @@ Nine riot modes built from **factions** — who they are, what they carry, who t
 they react when it starts. Modes and factions are JSON files, not code, so a custom faction needs
 no build step. Every optional feature is a switch with its own settings block.
 
-**Version 0.6.1.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
+**Version 0.7.0.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
 ScriptHookVDotNet 3 and [LemonUI](https://www.gta5-mods.com/tools/lemonui). **F6** opens the
 menu.
 

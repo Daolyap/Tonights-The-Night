@@ -1,5 +1,57 @@
 # Changelog
 
+## v0.7.0 — arrivals, not appearances
+
+Spawning is rebuilt around how the game's own dispatch works. Three of the four complaints
+behind this had a specific cause in the code.
+
+### Fixed — units materialised in front of you
+
+**Nothing checked whether you were looking at the spawn point.** A bearing and a distance were
+picked and whatever was being made was dropped straight onto it. Arrivals are now placed
+off-screen, with the first workable point kept as a fallback so an open hillside still gets its
+wave.
+
+**Vehicles spawned at a random heading.** Literally `random * 360` — which is why cars appeared
+sideways across the carriageway facing a wall. They now spawn on a road node, facing the way the
+road runs.
+
+**They spawned too close to drive in.** Land factions now arrive 140–260m out and drive to you,
+so what you see is a convoy coming down the road. Anyone who has to walk in instead gets a
+shorter distance, or they would still be walking when the riot ended.
+
+### Fixed — not enough of them in vehicles
+
+`inVehicleChance` is up across every faction that owns vehicles. Police, NOOSE, infantry, armour
+and the Martial Law police are now 100% — they arrive in something, always. Gangs are at 75–80%,
+because a gang war partly on foot is right.
+
+### Fixed — most aliens had no weapon
+
+`GIVE_WEAPON_TO_PED` reports nothing, so a weapon that resolved to a valid hash but would not
+attach left the ped empty-handed silently. Every ped is now checked with `HAS_PED_GOT_WEAPON`
+afterwards, falls through to the rest of its faction's loadout, then to a plain pistol, and
+whatever failed is named once in the log. The weapon is also forced into the ped's hands rather
+than left holstered — a faction waiting for a target read as unarmed until the moment it found
+one.
+
+### Fixed — the police would not shoot you
+
+This was mine, introduced with perception in v0.6.0. Their sight range was 60m and they spawn
+70–150m away: they were outside their own sight range for the entire approach, so you read as
+unseen, so they arrived **neutral** — and neutral police do not shoot.
+
+Perception is now built to lose you only when you are genuinely hidden:
+
+- Sight range 60m → **140m**
+- Inside 30m, line of sight is not asked at all — somebody beside you knows you are there
+- A car widens that to 54m, because a car is loud and large
+- Anyone already shooting at you counts as seeing you
+- Line-of-sight traces test the map only by default, so a bonnet or a bin is not concealment
+- They keep searching for 20 seconds rather than 12
+
+---
+
 ## v0.6.1 — QA pass before release
 
 A full correctness review of the codebase turned up sixteen defects. All are fixed. Nothing here
