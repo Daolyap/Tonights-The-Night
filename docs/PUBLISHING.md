@@ -15,14 +15,45 @@ It checks that the version in `TonightsTheNight.csproj` matches `DefaultConfig.V
 logging ship off, that no development aids are left in the menu, and that the licence and docs
 exist.
 
-What it cannot check, and you have to:
+What it cannot check, and you have to. Anything that calls a game native is unverifiable
+outside GTA V, so this list is the whole of the real QA.
 
-- [ ] Play one riot end to end on a **clean install** — no other script mods — and confirm it
-      loads, runs and stops.
-- [ ] Play one with your usual mod list and confirm nothing else broke.
-- [ ] Stop a riot, save, reload, and confirm the world is normal: no blips, no props stuck to
-      anyone, nobody sitting in a parked car, wanted ceiling back where it was.
-- [ ] Screenshots and, ideally, thirty seconds of video. This is what the listing is judged on.
+**It loads and shuts down**
+
+- [ ] Clean install, no other script mods: it loads, the notification appears, F6 opens the menu.
+- [ ] Your usual mod list: it loads and nothing else broke.
+- [ ] `scripts/TonightsTheNight/` is created with defaults, user.json, modes and profiles.
+- [ ] Stop a riot, save, reload: no blips, no props in anyone's hands, nobody stuck in a parked
+      car, everyone walking normally.
+- [ ] Alt-F4 mid-riot, restart: the world is clean and the log has its last lines.
+
+**The three that would have broken a first install** (fixed in v0.6.1, worth confirming)
+
+- [ ] Put `"density": { "pedMultiplier": 4.0 }` in user.json. The mod must still start.
+- [ ] Set `player.side` to a faction id, run a mode, stop it, then start a fight with the police.
+      You must still be able to reach a full wanted level.
+- [ ] Drop a junk .json into `modes/`. It must be skipped with a log line, not crash the game.
+
+**Behaviour**
+
+- [ ] Martial Law: civilians fight the army, not you and not each other.
+- [ ] Drive through a riot at speed: drivers do four different things, not all the same one.
+- [ ] Break line of sight for fifteen seconds: they lose you and go back to fighting each other.
+- [ ] Shoot someone from cover: gunfire gives you away through walls.
+- [ ] Kill three carloads of soldiers: the next waves get visibly bigger.
+- [ ] Hurt someone and drive off: a carload forms up and comes after you.
+- [ ] Invasion: ships overhead, aliens arriving under them, complete alien skins.
+- [ ] The Purge: it counts down, ends on its own, and your wanted ceiling comes back.
+
+**Performance**
+
+- [ ] Open the menu during a busy riot. Compare the frame rate to v0.5.0 if you can.
+- [ ] Debug overlay on: tick time and peak tick under a full Martial Law deployment.
+- [ ] Note the ped count where it starts to hurt.
+
+**For the listing**
+
+- [ ] Screenshots and, ideally, thirty seconds of video. This is what it is judged on.
 
 ## 2. Tag it
 
