@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ConfigTests</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    The config layer has no dependency on the game, so it is compiled here against net8 and
+    exercised in CI. Nothing that touches a native can be tested this way, but the parser and
+    the shipped mode files can - and those are the parts a typo silently breaks.
+  -->
+  <ItemGroup>
+    <Compile Include="../../src/TonightsTheNight/Util/Json.cs" />
+    <Compile Include="../../src/TonightsTheNight/Util/Log.cs" />
+    <Compile Include="../../src/TonightsTheNight/Config/DefaultConfig.cs" />
+    <Compile Include="../../src/TonightsTheNight/Config/ConfigStore.cs" />
+    <Compile Include="../../src/TonightsTheNight/Factions/WeaponTable.cs" />
+    <Compile Include="../../src/TonightsTheNight/Factions/WeaponPresets.cs" />
+  </ItemGroup>
+
+</Project>
