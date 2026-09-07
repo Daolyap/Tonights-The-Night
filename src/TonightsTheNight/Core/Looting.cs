@@ -57,6 +57,7 @@ namespace TonightsTheNight.Core
         private readonly ConfigStore _config;
         private readonly ModelResolver _models;
         private readonly Random _random;
+        private readonly EntityRegistry _registry;
 
         private readonly List<LootJob> _jobs = new List<LootJob>();
         private List<Model> _props;
@@ -66,11 +67,12 @@ namespace TonightsTheNight.Core
         public int Active { get { return _jobs.Count; } }
         public int Total { get; private set; }
 
-        public Looting(ConfigStore config, ModelResolver models, Random random)
+        public Looting(ConfigStore config, ModelResolver models, Random random, EntityRegistry registry)
         {
             _config = config;
             _models = models;
             _random = random;
+            _registry = registry;
         }
 
         public void Reset()
@@ -185,9 +187,14 @@ namespace TonightsTheNight.Core
         {
             Ped ped = job.Entry.Ped;
 
+            Prop prop = null;
+
             try
             {
-                Prop prop = CreateLoot(ped);
+                // Never over the top of one already in hand: the old prop would be orphaned, and
+                // a persistent orphan is one the engine can no longer take back.
+                if (job.Entry.Loot == null) { prop = CreateLoot(ped); }
+
                 if (prop != null)
                 {
                     job.Entry.Loot = prop;
@@ -218,6 +225,15 @@ namespace TonightsTheNight.Core
             catch (Exception ex)
             {
                 Log.Error("Could not start a looting job", ex);
+
+                // Whatever was created before the throw is ours and nothing else will free it.
+                try
+                {
+                    if (prop != null && prop.Exists()) { prop.Delete(); }
+                }
+                catch (Exception) { }
+
+                job.Entry.Loot = null;
                 return false;
             }
         }
@@ -234,7 +250,10 @@ namespace TonightsTheNight.Core
             {
                 if (vehicle == null || !vehicle.Exists()) { continue; }
                 if (!Function.Call<bool>(Hash.IS_VEHICLE_DRIVEABLE, vehicle, false)) { continue; }
-                if (Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, vehicle)) { continue; }
+                // A vehicle one of our own factions arrived in is fair game; somebody else's
+                // mission vehicle is not.
+                if (!_registry.OwnsVehicle(vehicle) &&
+                    Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, vehicle)) { continue; }
                 // Empty cars only: hauling a stranger out can reach a mission ped, or one
                 // another mod owns.
                 if (!Function.Call<bool>(Hash.IS_VEHICLE_SEAT_FREE, vehicle, -1)) { continue; }
@@ -354,7 +373,9 @@ namespace TonightsTheNight.Core
             Prop prop = World.CreateProp(model, ped.Position, false, false);
             if (prop == null || !prop.Exists()) { return null; }
 
-            prop.IsPersistent = false;
+            // Ours: it is attached to a ped's hand and deleted explicitly when the job ends.
+            // Left reclaimable it could vanish out of their grip.
+            prop.IsPersistent = true;
             Function.Call(Hash.SET_ENTITY_COLLISION, prop, false, false);
             return prop;
         }

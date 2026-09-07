@@ -76,6 +76,7 @@ namespace TonightsTheNight.Core
         private readonly List<Ped> _pacifying = new List<Ped>();
         private int _pacifyUntil;
         private int _nextStatsAt;
+        private int _nextVehiclePruneAt;
         private bool _playerMovedGroup;
 
         public RiotMode ActiveMode { get; private set; }
@@ -114,8 +115,8 @@ namespace TonightsTheNight.Core
             _vehicles = new VehicleBehaviour(config);
             _craft = new SkyCraft(config, _models, _random);
             _perception = new Perception(config, _random);
-            _pursuit = new Pursuit(config, _random);
-            _looting = new Looting(config, _models, _random);
+            _pursuit = new Pursuit(config, _random, _registry);
+            _looting = new Looting(config, _models, _random, _registry);
 
             Escalation = new Escalation(config);
             Zone = new RiotZone(config);
@@ -411,6 +412,13 @@ namespace TonightsTheNight.Core
 
                 Reaction reaction = faction.ResolveReaction(_random);
                 TrackedPed entry = _registry.Add(ped, faction, reaction, false);
+
+                // Taken over means taken responsibility for. Left non-persistent, the ped you
+                // are in the middle of a fight with is exactly the one the population manager
+                // reclaims - it has no idea the fight matters. Restore hands them back.
+                try { ped.IsPersistent = true; }
+                catch (Exception ex) { Log.Error("Could not take ownership of a recruit", ex); }
+
                 _conditioner.Apply(ped, faction, reaction, _lastFighter, entry, HostileFor(entry));
                 entry.LastTaskedAt = Game.GameTime;
 
@@ -461,6 +469,15 @@ namespace TonightsTheNight.Core
                 }
 
                 List<Ped> wave = _spawner.SpawnWave(faction, anchor);
+
+                // Before the conditioning loop, not after it. Conditioning can throw, and the
+                // catch is all the way up in Tick - which would leave these vehicles persistent
+                // and unreachable from every cleanup path there is.
+                foreach (Vehicle arrived in _spawner.LastWaveVehicles)
+                {
+                    _registry.AddVehicle(arrived);
+                }
+
                 if (wave.Count == 0) { continue; }
 
                 Ped target = _lastFighter != null && _lastFighter.Exists() ? _lastFighter : Game.Player.Character;
@@ -483,7 +500,8 @@ namespace TonightsTheNight.Core
                 }
 
                 RecruitedTotal += wave.Count;
-                Log.Debug("Spawned " + wave.Count + " for faction '" + faction.Id + "'.");
+                Log.Debug("Spawned " + wave.Count + " for faction '" + faction.Id + "' in " +
+                          _spawner.LastWaveVehicles.Count + " vehicle(s).");
             }
         }
 
@@ -535,7 +553,8 @@ namespace TonightsTheNight.Core
 
             Log.Info("Riot: active " + _registry.Count + "/" + _config.GetInt("engine.maxTrackedPeds", 120) +
                      ", recruited " + RecruitedTotal + ", lost " + LostTotal + ", kills " + Kills +
-                     ", culled " + CulledTotal + ", fires " + Ambience.ActiveFires +
+                     ", culled " + CulledTotal + ", vehicles " + _registry.VehicleCount +
+                     ", fires " + Ambience.ActiveFires +
                      ", chases " + _pursuit.ActiveChases + "/" + _pursuit.Started +
                      ", reinforcement " + ReinforcementSummary() +
                      ", player " + (_perception.Spotted ? "spotted" : "unseen " + _perception.SecondsSinceSeen + "s") +
@@ -731,6 +750,7 @@ namespace TonightsTheNight.Core
         private void ProcessTracked()
         {
             LostTotal += _registry.PruneDead();
+            PruneVehicles();
             ReportStats();
 
             IReadOnlyList<TrackedPed> tracked = _registry.Tracked;
@@ -802,6 +822,22 @@ namespace TonightsTheNight.Core
                 UpdateBlip(entry, rangeSquared);
                 _cursor++;
             }
+        }
+
+        /// <summary>
+        /// Releases vehicles we are done with. Throttled: it walks the whole list with a native
+        /// per vehicle, which does not belong on the same 50ms cadence as the ped work.
+        /// </summary>
+        private void PruneVehicles()
+        {
+            if (Game.GameTime < _nextVehiclePruneAt) { return; }
+            _nextVehiclePruneAt = Game.GameTime + 2000;
+
+            _registry.PruneVehicles(
+                Game.Player.Character.Position,
+                _config.GetFloat("engine.cullDistance", 450f),
+                _config.GetFloat("engine.abandonedVehicleDistance", 120f),
+                _config.GetInt("engine.maxTrackedVehicles", 40));
         }
 
         /// <summary>

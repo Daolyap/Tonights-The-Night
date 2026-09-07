@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.8.0 — the mod did not own anything it created
+
+The despawning and the missing vehicles were one bug, and it was in the first line of every
+spawn.
+
+### Fixed — entities vanishing mid-fight
+
+**Every ped and vehicle the mod created was marked `IsPersistent = false`** — which tells GTA's
+population manager *take this whenever you like*, at the moment of creation. The manager is under
+pressure the whole time, partly because this mod was raising ambient ped density to 2.5 itself.
+So it took them. Soldiers vanished mid-firefight, and spawned vehicles were among the first
+things reclaimed, which is why there were barely any.
+
+The release call in the registry was always in the right place — `MarkAsNoLongerNeeded` when we
+are done with something. The mod was just saying it at creation instead.
+
+Now: spawned peds, spawned vehicles, recruited pedestrians and loot props are all owned while
+tracked, and released on every path that lets go of them — restore, cull, death, mode stop and
+script abort.
+
+**Spawned vehicles were tracked by nothing at all.** The registry only held peds, so a troop
+carrier belonged to nobody: never cleaned up, never protected. There is now a vehicle registry
+with its own ceiling, releasing anything wrecked, abandoned by its crew, too far away, or over
+the cap.
+
+### Changed — density
+
+Ped density 2.5 → **1.8**, vehicle density 0.8 → **1.3**. The 2.5 was set back when the riot
+consumed its own participants, before anything the mod made was actually owned by it — flooding
+the ambient pool *and* spawning was competing with itself for the same slots. More traffic also
+means more for a chase to commandeer and a looter to steal.
+
+### Fixed — six knock-on defects from the above
+
+Owning a vehicle makes it a **mission entity**, and the chase and theft code both refuse mission
+entities — a guard meant for story vehicles and ones other mods own. So a police crew could no
+longer chase you in the car it arrived in. The registry now distinguishes our own vehicles from
+everyone else's.
+
+Also: wave vehicles were registered after the conditioning loop, so one exception would have left
+them persistent and unreachable from every cleanup path; the prune sweep walked the whole list
+with a native per vehicle every 50ms and is now throttled; a vehicle that threw mid-prune was
+dropped from the list without being released; and a loot prop could be orphaned by a second job,
+which as a persistent entity the engine could never reclaim.
+
+---
+
 ## v0.7.0 — arrivals, not appearances
 
 Spawning is rebuilt around how the game's own dispatch works. Three of the four complaints

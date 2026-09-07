@@ -36,6 +36,11 @@ namespace TonightsTheNight.Core
             _reinforcements = reinforcements;
         }
 
+        /// <summary>Vehicles created by the last wave, for the caller to take ownership of.</summary>
+        public List<Vehicle> LastWaveVehicles { get { return _waveVehicles; } }
+
+        private readonly List<Vehicle> _waveVehicles = new List<Vehicle>();
+
         public void Reset()
         {
             _nextWaveAt.Clear();
@@ -77,6 +82,7 @@ namespace TonightsTheNight.Core
         public List<Ped> SpawnWave(Faction faction, Vector3 anchor)
         {
             var spawned = new List<Ped>();
+            _waveVehicles.Clear();
             SpawnProfile profile = faction.Spawn;
 
             // Losses shorten the gap between waves as well as widening them.
@@ -183,7 +189,9 @@ namespace TonightsTheNight.Core
             // can be told apart from one whose crew simply came after somebody else's.
             int firstSeat = spawned.Count;
 
-            vehicle.IsPersistent = false;
+            // Same again: a non-persistent vehicle is the first thing the engine reclaims, so
+            // troop carriers and squad cars were disappearing almost as fast as they arrived.
+            vehicle.IsPersistent = true;
             Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle, true, true, false);
 
             if (air)
@@ -211,6 +219,8 @@ namespace TonightsTheNight.Core
                 spawned.Add(ped);
             }
 
+            if (spawned.Count > firstSeat) { _waveVehicles.Add(vehicle); }
+
             if (spawned.Count == firstSeat)
             {
                 // Nobody made it in - the ped pool is spent. Testing the shared list instead
@@ -223,7 +233,14 @@ namespace TonightsTheNight.Core
 
         private static void Prepare(Ped ped, Faction faction)
         {
-            ped.IsPersistent = false;
+            // Ours until the registry hands it back.
+            //
+            // This was false, which tells the population manager "take this whenever you like" -
+            // at the moment of creation. The manager is under pressure the whole time, partly
+            // because this mod raises the ped density itself, so it took them: soldiers vanished
+            // mid-firefight and half a wave was gone before it reached the street. The release
+            // call in EntityRegistry.Restore was always the right place to say we were done.
+            ped.IsPersistent = true;
             // Otherwise ambient events (a car horn, a nearby scream) pull spawned peds out of
             // whatever we tasked them with, and a squad wanders off mid-deployment.
             ped.BlockPermanentEvents = true;

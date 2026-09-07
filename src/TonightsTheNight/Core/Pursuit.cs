@@ -55,6 +55,7 @@ namespace TonightsTheNight.Core
 
         private readonly ConfigStore _config;
         private readonly Random _random;
+        private readonly EntityRegistry _registry;
 
         private readonly List<Chase> _chases = new List<Chase>();
 
@@ -69,10 +70,11 @@ namespace TonightsTheNight.Core
 
         public bool Enabled { get { return _config.GetBool("features.pursuit.enabled", true); } }
 
-        public Pursuit(ConfigStore config, Random random)
+        public Pursuit(ConfigStore config, Random random, EntityRegistry registry)
         {
             _config = config;
             _random = random;
+            _registry = registry;
         }
 
         /// <summary>
@@ -321,7 +323,7 @@ namespace TonightsTheNight.Core
             return best;
         }
 
-        private static bool IsUsableRide(Vehicle vehicle, Ped player)
+        private bool IsUsableRide(Vehicle vehicle, Ped player)
         {
             if (vehicle == null || !vehicle.Exists()) { return false; }
             if (!Function.Call<bool>(Hash.IS_VEHICLE_DRIVEABLE, vehicle, false)) { return false; }
@@ -330,7 +332,14 @@ namespace TonightsTheNight.Core
             Vehicle ride = player.CurrentVehicle;
             if (ride != null && ride.Exists() && ride.Handle == vehicle.Handle) { return false; }
 
-            if (Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, vehicle)) { return false; }
+            // Ours counts as available. Owning a vehicle makes it a mission entity, and this
+            // guard exists to keep us off story vehicles and ones another mod owns - not off the
+            // squad car a faction of ours arrived in.
+            if (!_registry.OwnsVehicle(vehicle) &&
+                Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, vehicle))
+            {
+                return false;
+            }
 
             // Bikes and boats make for a poor drive-by and a worse chase.
             return vehicle.ClassType != VehicleClass.Boats &&

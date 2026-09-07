@@ -18,9 +18,128 @@ namespace TonightsTheNight.Core
     public sealed class EntityRegistry
     {
         private readonly List<TrackedPed> _tracked = new List<TrackedPed>();
+
+        /// <summary>
+        /// Vehicles this mod created. Nothing tracked them before, so a spawned troop carrier
+        /// was owned by nobody: never released on stop, and - being non-persistent - reclaimed
+        /// by the engine almost as soon as it arrived.
+        /// </summary>
+        private readonly List<Vehicle> _vehicles = new List<Vehicle>();
         private readonly Dictionary<int, TrackedPed> _byHandle = new Dictionary<int, TrackedPed>();
 
         public int Count { get { return _tracked.Count; } }
+
+        public int VehicleCount { get { return _vehicles.Count; } }
+
+        public void AddVehicle(Vehicle vehicle)
+        {
+            if (vehicle != null && vehicle.Exists() && !OwnsVehicle(vehicle)) { _vehicles.Add(vehicle); }
+        }
+
+        /// <summary>
+        /// Whether this is one of ours.
+        ///
+        /// Owning a vehicle makes it a mission entity, and the chase and theft code both refuse
+        /// mission entities - that guard is there to avoid touching story vehicles and ones
+        /// another mod owns. Without this, taking ownership of a squad car meant its own crew
+        /// could no longer chase you in it.
+        /// </summary>
+        public bool OwnsVehicle(Vehicle vehicle)
+        {
+            if (vehicle == null) { return false; }
+
+            for (int i = 0; i < _vehicles.Count; i++)
+            {
+                if (_vehicles[i] != null && _vehicles[i].Handle == vehicle.Handle) { return true; }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Lets go of vehicles that are gone, wrecked, or further away than we care about.
+        /// Persistent vehicles are ours to release; nothing else will do it.
+        /// </summary>
+        /// <summary>
+        /// Lets go of vehicles we are finished with: gone, wrecked, empty and left behind, or
+        /// far enough away not to matter. Also enforces a ceiling, because a vehicle nobody ever
+        /// decides to release is a vehicle pinned in the pool for the session.
+        /// </summary>
+        public int PruneVehicles(GTA.Math.Vector3 origin, float cullDistance, float abandonDistance, int ceiling)
+        {
+            float cullSquared = cullDistance * cullDistance;
+            float abandonSquared = abandonDistance * abandonDistance;
+            int released = 0;
+
+            for (int i = _vehicles.Count - 1; i >= 0; i--)
+            {
+                Vehicle vehicle = _vehicles[i];
+
+                try
+                {
+                    if (vehicle == null || !vehicle.Exists())
+                    {
+                        _vehicles.RemoveAt(i);
+                        continue;
+                    }
+
+                    float distance = origin.DistanceToSquared(vehicle.Position);
+
+                    // A wreck is finished with wherever it is. Waiting for it to be 450m away
+                    // means a burnt-out troop carrier stays pinned for as long as you stand
+                    // near it.
+                    bool wrecked = !Function.Call<bool>(Hash.IS_VEHICLE_DRIVEABLE, vehicle, false);
+
+                    // An empty one has served its purpose: its crew got out or was killed.
+                    bool abandoned = distance > abandonSquared && !HasLivingCrew(vehicle);
+
+                    // Over the ceiling, the oldest go first - the list is in arrival order.
+                    bool surplus = _vehicles.Count - released > ceiling;
+
+                    if (!wrecked && !abandoned && !surplus && distance <= cullSquared) { continue; }
+
+                    ReleaseVehicle(vehicle);
+                    _vehicles.RemoveAt(i);
+                    released++;
+                }
+                catch (Exception ex)
+                {
+                    // Release first: removing it from the list without letting go would leave it
+                    // persistent with nothing left holding a reference to it.
+                    Log.Error("Failed to prune a vehicle", ex);
+                    ReleaseVehicle(vehicle);
+                    _vehicles.RemoveAt(i);
+                }
+            }
+
+            return released;
+        }
+
+        private bool HasLivingCrew(Vehicle vehicle)
+        {
+            foreach (Ped occupant in vehicle.Occupants)
+            {
+                if (occupant == null || !occupant.Exists() || occupant.IsDead) { continue; }
+                if (Contains(occupant)) { return true; }
+            }
+
+            return false;
+        }
+
+        private static void ReleaseVehicle(Vehicle vehicle)
+        {
+            try
+            {
+                if (vehicle == null || !vehicle.Exists()) { return; }
+
+                vehicle.IsPersistent = false;
+                vehicle.MarkAsNoLongerNeeded();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failed to release a vehicle", ex);
+            }
+        }
 
         /// <summary>
         /// Live blips, maintained rather than recounted. The cap is consulted once per recruit,
@@ -79,10 +198,40 @@ namespace TonightsTheNight.Core
             DeleteBlip(entry);
             DeleteLoot(entry);
 
-            if (restore) { Restore(entry); }
+            if (restore)
+            {
+                Restore(entry);
+            }
+            else
+            {
+                // The no-restore path is a corpse or a handle we have lost. Ownership still has
+                // to go back either way: now that tracked peds are persistent, skipping this
+                // would leave every body in the riot pinned in the pool for the session, which
+                // is precisely the exhaustion the persistence was meant to prevent.
+                Disown(entry);
+            }
 
             _tracked.Remove(entry);
             Unindex(entry);
+        }
+
+        /// <summary>
+        /// Releases our claim without touching anything else. Only when the entry still refers
+        /// to the ped we took over - a recycled handle belongs to somebody else now.
+        /// </summary>
+        private static void Disown(TrackedPed entry)
+        {
+            try
+            {
+                if (!IsSameEntity(entry)) { return; }
+
+                entry.Ped.IsPersistent = false;
+                entry.Ped.MarkAsNoLongerNeeded();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failed to release a ped", ex);
+            }
         }
 
         /// <summary>
@@ -117,6 +266,9 @@ namespace TonightsTheNight.Core
                 TrackedPed entry = _tracked[i];
                 if (IsSameEntity(entry)) { continue; }
 
+                // No Disown here: this branch is reached only when the entry no longer refers
+                // to the ped we took over, and releasing a handle that now belongs to something
+                // else would be releasing somebody else's ped.
                 DeleteBlip(entry);
                 DeleteLoot(entry);
                 Unindex(entry);
@@ -164,6 +316,9 @@ namespace TonightsTheNight.Core
                 }
             }
 
+            foreach (Vehicle vehicle in _vehicles) { ReleaseVehicle(vehicle); }
+
+            _vehicles.Clear();
             _tracked.Clear();
             _byHandle.Clear();
             BlipCount = 0;

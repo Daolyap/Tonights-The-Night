@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.7.0";
+        public const string Version = "0.8.0";
 
         public static JsonValue Build()
         {
@@ -42,6 +42,11 @@ namespace TonightsTheNight.Config
             engine.Set("workIntervalMs", JsonValue.Of(50));
             engine.Set("cullDistance", JsonValue.Of(450));
             engine.Set("maxTrackedPeds", JsonValue.Of(120));
+            // Vehicles this mod owns. They are mission entities while we hold them, so something
+            // has to decide when to let go or they stay pinned for the session.
+            engine.Set("maxTrackedVehicles", JsonValue.Of(40));
+            // An empty one this far away has served its purpose - the crew got out or died.
+            engine.Set("abandonedVehicleDistance", JsonValue.Of(120));
             engine.Set("adaptiveBudget", JsonValue.Of(true));
             engine.Set("targetTickMs", JsonValue.Of(1.5));
             root.Set("engine", engine);
@@ -68,8 +73,13 @@ namespace TonightsTheNight.Config
             // A riot consumes its own participants. Without extra crowd the local population
             // is spent in a couple of minutes and the street goes quiet. Needs a gameconfig and
             // Heap Adjuster to be safe at this level - see INSTALL.md.
-            density.Set("pedMultiplier", JsonValue.Of(2.5));
-            density.Set("vehicleMultiplier", JsonValue.Of(0.8));
+            // 2.5 was set back when the riot consumed its own participants, before anything the
+            // mod created was actually owned by it. Flooding the ambient pool while also
+            // spawning is what left the engine reclaiming peds mid-fight, so this is lower now.
+            density.Set("pedMultiplier", JsonValue.Of(1.8));
+            // Above 1: traffic is scenery a riot needs. It is also what a chase commandeers and
+            // what a looter steals, and 0.8 was thinning out both.
+            density.Set("vehicleMultiplier", JsonValue.Of(1.3));
             density.Set("scenarioMultiplier", JsonValue.Of(0.4));
             root.Set("density", density);
 
