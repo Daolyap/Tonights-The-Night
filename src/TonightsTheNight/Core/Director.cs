@@ -30,6 +30,8 @@ namespace TonightsTheNight.Core
         private readonly Random _random = new Random();
         private readonly Pursuit _pursuit;
         private readonly Looting _looting;
+        private readonly Reinforcements _reinforcements;
+        private readonly SkyCraft _craft;
 
         public Escalation Escalation { get; private set; }
         public RiotZone Zone { get; private set; }
@@ -38,6 +40,8 @@ namespace TonightsTheNight.Core
 
         public Pursuit Pursuit { get { return _pursuit; } }
         public Looting Looting { get { return _looting; } }
+        public Reinforcements Reinforcements { get { return _reinforcements; } }
+        public SkyCraft Craft { get { return _craft; } }
 
         /// <summary>Recruits confirmed dead, as opposed to merely despawned. Drives escalation.</summary>
         public int Kills { get; private set; }
@@ -68,6 +72,14 @@ namespace TonightsTheNight.Core
         public RiotMode ActiveMode { get; private set; }
         public bool IsRunning { get { return ActiveMode != null; } }
 
+        /// <summary>
+        /// Set while the menu is open. The riot keeps existing - density, escalation, the purge
+        /// clock - but stops recruiting, spawning and retasking, because none of that needs to
+        /// happen in the few seconds you spend reading a slider, and the menu itself is not
+        /// cheap to draw.
+        /// </summary>
+        public bool Paused { get; set; }
+
 
         // Live numbers for the debug overlay and, more importantly, for the log.
         public int TrackedCount { get { return _registry.Count; } }
@@ -88,8 +100,10 @@ namespace TonightsTheNight.Core
         {
             _config = config;
             _conditioner = new PedConditioner(config, _relationships, _random);
-            _spawner = new Spawner(config, _models, _random);
+            _reinforcements = new Reinforcements(config);
+            _spawner = new Spawner(config, _models, _random, _reinforcements);
             _vehicles = new VehicleBehaviour(config);
+            _craft = new SkyCraft(config, _models, _random);
             _pursuit = new Pursuit(config, _random);
             _looting = new Looting(config, _models, _random);
 
@@ -131,6 +145,8 @@ namespace TonightsTheNight.Core
             _spawner.Reset();
             _pursuit.Reset();
             _looting.Reset();
+            _reinforcements.Reset();
+            _craft.Reset();
 
             ActiveMode = mode;
             Kills = 0;
@@ -170,6 +186,7 @@ namespace TonightsTheNight.Core
             Ambience.Clear();
             Zone.Clear();
             Purge.Clear();
+            _craft.Clear();
             _models.Release();
 
             _relationships.Clear();
@@ -190,6 +207,7 @@ namespace TonightsTheNight.Core
                 _registry.RestoreAll();
                 Ambience.Clear();
                 Zone.Clear();
+                _craft.Clear();
                 // Leaves the wanted ceiling at zero for the rest of the session if skipped,
                 // which would look exactly like the police mod having broken.
                 Purge.Clear();
@@ -241,11 +259,18 @@ namespace TonightsTheNight.Core
 
                 // Both throttle themselves, and both need to run while the player is driving
                 // rather than only when the recruiting pass happens to come round.
-                _pursuit.Update(_registry.Tracked);
-                _looting.Update(_registry.Tracked, unphased || phase.Looting);
+                // Ships hold station whether or not you are reading a menu; they are two
+                // entity moves a quarter-second, and a fleet that freezes mid-air is worse.
+                _craft.Update(ActiveMode.Craft, Zone.Centre, true);
+
+                if (!Paused)
+                {
+                    _pursuit.Update(_registry.Tracked);
+                    _looting.Update(_registry.Tracked, unphased || phase.Looting);
+                }
 
                 // Recruiting and retasking are the expensive half and do not need frame rate.
-                if (Game.GameTime >= _nextWorkAt)
+                if (!Paused && Game.GameTime >= _nextWorkAt)
                 {
                     _nextWorkAt = Game.GameTime + _config.GetInt("engine.workIntervalMs", 50);
                     Recruit();
@@ -378,7 +403,17 @@ namespace TonightsTheNight.Core
                 if (!Escalation.Allows(faction.FromPhase)) { continue; }
                 if (!_spawner.WaveDue(faction)) { continue; }
 
-                List<Ped> wave = _spawner.SpawnWave(faction, Zone.Centre);
+                // Aliens walk out from under their own ship rather than appearing behind a
+                // hedge, which is the half that makes the craft read as an arrival.
+                GTA.Math.Vector3 anchor = Zone.Centre;
+
+                if (faction.ArrivesByCraft)
+                {
+                    GTA.Math.Vector3 drop = _craft.DropPoint();
+                    if (drop != GTA.Math.Vector3.Zero) { anchor = drop; }
+                }
+
+                List<Ped> wave = _spawner.SpawnWave(faction, anchor);
                 if (wave.Count == 0) { continue; }
 
                 Ped target = _lastFighter != null && _lastFighter.Exists() ? _lastFighter : Game.Player.Character;
@@ -419,6 +454,22 @@ namespace TonightsTheNight.Core
             return true;
         }
 
+        /// <summary>
+        /// Records a casualty and says so on screen the first time a faction crosses a whole
+        /// step. Without the notification the only evidence the system exists is a slow drift in
+        /// numbers nobody would connect to their own body count.
+        /// </summary>
+        private void NoteReinforcement(Faction faction)
+        {
+            _reinforcements.NoteLoss(faction);
+
+            string announcement = _reinforcements.StepUp(faction);
+            if (announcement != null)
+            {
+                GTA.UI.Notification.Show("~o~" + announcement);
+            }
+        }
+
         private void AnnouncePhase()
         {
             GTA.UI.Notification.Show("~r~" + Escalation.CurrentName + "~s~");
@@ -439,9 +490,33 @@ namespace TonightsTheNight.Core
                      ", recruited " + RecruitedTotal + ", lost " + LostTotal + ", kills " + Kills +
                      ", culled " + CulledTotal + ", fires " + Ambience.ActiveFires +
                      ", chases " + _pursuit.ActiveChases + "/" + _pursuit.Started +
+                     ", reinforcement " + ReinforcementSummary() +
                      ", looting " + _looting.Active + "/" + _looting.Total +
                      ", phase " + Escalation.Current + " '" + Escalation.CurrentName + "'" +
                      ", tick " + LastTickMs.ToString("F2") + "ms, budget " + _budget);
+        }
+
+        /// <summary>Per-faction commitment, for the log line that explains a growing response.</summary>
+        private string ReinforcementSummary()
+        {
+            if (!_reinforcements.Enabled || ActiveMode == null) { return "off"; }
+
+            var summary = new System.Text.StringBuilder();
+
+            foreach (Faction faction in ActiveMode.Factions)
+            {
+                if (!faction.Spawn.Enabled) { continue; }
+
+                int losses = _reinforcements.LossesFor(faction);
+                if (losses == 0) { continue; }
+
+                if (summary.Length > 0) { summary.Append(' '); }
+                summary.Append(faction.Id).Append(" x")
+                       .Append(_reinforcements.Commitment(faction).ToString("F1"))
+                       .Append("(-").Append(losses).Append(')');
+            }
+
+            return summary.Length == 0 ? "none yet" : summary.ToString();
         }
 
         /// <summary>
@@ -638,6 +713,10 @@ namespace TonightsTheNight.Core
                     if (entry.Ped != null && entry.Ped.Exists() && entry.Ped.IsDead)
                     {
                         Kills++;
+
+                        // Only spawned members count: converting a pedestrian and losing them
+                        // is the riot working, not a faction taking casualties.
+                        if (entry.Spawned) { NoteReinforcement(entry.Faction); }
 
                         // Killing someone is the loudest provocation there is, and the one most
                         // likely to be followed by driving away from it. A kill by car is

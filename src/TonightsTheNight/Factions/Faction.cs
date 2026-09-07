@@ -69,6 +69,12 @@ namespace TonightsTheNight.Factions
         public SpawnProfile Spawn { get; private set; }
 
         /// <summary>
+        /// Whether this faction arrives underneath one of the mode's craft rather than at a
+        /// random point around the riot. Ignored when nothing is overhead.
+        /// </summary>
+        public bool ArrivesByCraft { get; private set; }
+
+        /// <summary>
         /// The escalation phase this faction joins at. 0 means present from the start; a higher
         /// number is what makes the military arrive late rather than at the first punch.
         /// </summary>
@@ -121,6 +127,7 @@ namespace TonightsTheNight.Factions
                 Accuracy = node["accuracy"].AsInt(-1),
                 PlayerRelationship = RelationshipMatrix.Parse(node["playerRelationship"].AsString(null), -1),
                 Outfit = node["outfit"].AsString("default"),
+                ArrivesByCraft = node["arrivesByCraft"].AsBool(false),
                 Recruits = node["recruits"].AsString("none"),
                 TakesWeaponPreset = node["weaponPreset"].AsBool(
                     !string.Equals(node["recruits"].AsString("none"), "none", StringComparison.OrdinalIgnoreCase)),

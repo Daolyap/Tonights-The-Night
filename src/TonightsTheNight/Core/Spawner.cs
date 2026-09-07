@@ -23,15 +23,17 @@ namespace TonightsTheNight.Core
         private readonly ConfigStore _config;
         private readonly ModelResolver _models;
         private readonly Random _random;
+        private readonly Reinforcements _reinforcements;
 
         private readonly Dictionary<string, int> _nextWaveAt = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, int> _aliveByFaction = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        public Spawner(ConfigStore config, ModelResolver models, Random random)
+        public Spawner(ConfigStore config, ModelResolver models, Random random, Reinforcements reinforcements)
         {
             _config = config;
             _models = models;
             _random = random;
+            _reinforcements = reinforcements;
         }
 
         public void Reset()
@@ -60,7 +62,7 @@ namespace TonightsTheNight.Core
 
             int alive;
             _aliveByFaction.TryGetValue(faction.Id, out alive);
-            if (alive >= faction.Spawn.MaxAlive) { return false; }
+            if (alive >= CapFor(faction)) { return false; }
 
             int due;
             if (_nextWaveAt.TryGetValue(faction.Id, out due) && Game.GameTime < due) { return false; }
@@ -77,7 +79,9 @@ namespace TonightsTheNight.Core
             var spawned = new List<Ped>();
             SpawnProfile profile = faction.Spawn;
 
-            _nextWaveAt[faction.Id] = Game.GameTime + profile.WaveIntervalMs;
+            // Losses shorten the gap between waves as well as widening them.
+            float commitment = _reinforcements.Commitment(faction);
+            _nextWaveAt[faction.Id] = Game.GameTime + (int)(profile.WaveIntervalMs / commitment);
 
             Model pedModel;
             if (!_models.TryResolve(profile.Models, out pedModel) || !_models.Load(pedModel))
@@ -90,7 +94,9 @@ namespace TonightsTheNight.Core
 
             if (byVehicle)
             {
-                for (int i = 0; i < profile.VehiclesPerWave; i++)
+                int vehicles = Math.Max(1, (int)Math.Round(profile.VehiclesPerWave * commitment));
+
+                for (int i = 0; i < vehicles; i++)
                 {
                     SpawnVehicleWave(faction, anchor, pedModel, spawned);
                 }
@@ -110,9 +116,30 @@ namespace TonightsTheNight.Core
             return spawned;
         }
 
+        /// <summary>How many arrive in one wave, after casualties are taken into account.</summary>
+        private int WaveSizeFor(Faction faction)
+        {
+            float commitment = _reinforcements.Commitment(faction);
+            int size = (int)Math.Round(faction.Spawn.PerWave * commitment);
+            return size < 1 ? 1 : size;
+        }
+
+        /// <summary>
+        /// The ceiling on how many of this faction can be alive at once. It rises with losses
+        /// too, or a faction being wiped out fast would send bigger waves into the same cap and
+        /// nothing would visibly change.
+        /// </summary>
+        private int CapFor(Faction faction)
+        {
+            float commitment = _reinforcements.Commitment(faction);
+            return (int)Math.Round(faction.Spawn.MaxAlive * commitment);
+        }
+
         private void SpawnFootWave(Faction faction, Vector3 anchor, Model model, List<Ped> spawned)
         {
-            for (int i = 0; i < faction.Spawn.PerWave; i++)
+            int size = WaveSizeFor(faction);
+
+            for (int i = 0; i < size; i++)
             {
                 Vector3 point = PickPoint(anchor, faction.Spawn, false);
                 if (point == Vector3.Zero) { continue; }

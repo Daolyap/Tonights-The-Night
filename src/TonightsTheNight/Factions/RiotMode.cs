@@ -37,6 +37,9 @@ namespace TonightsTheNight.Factions
         /// <summary>Countdown and curfew, for Purge and anything shaped like it.</summary>
         public JsonValue Purge { get; private set; }
 
+        /// <summary>Ships in the sky, if this mode has any. Only the invasion does.</summary>
+        public JsonValue Craft { get; private set; }
+
         /// <summary>How this mode treats the player when they have not picked a side.</summary>
         public int PlayerRelationship { get; private set; }
 
@@ -62,6 +65,7 @@ namespace TonightsTheNight.Factions
                 Escalation = node["escalation"],
                 Ambience = node["ambience"],
                 Purge = node["purge"],
+                Craft = node["craft"],
                 PlayerRelationship = ParseRelationship(node["playerRelationship"].AsString("neutral")),
                 Order = node["order"].AsInt(1000)
             };

@@ -62,6 +62,12 @@ namespace TonightsTheNight.Core
                     return;
                 }
 
+                if (vehicle.ClassType == VehicleClass.Planes)
+                {
+                    ApplyPlane(driver, vehicle, target);
+                    return;
+                }
+
                 // Mission type and driving style are community-documented rather than official,
                 // so both are config-exposed: if the ramming reads wrong, it is a config edit
                 // and a reload rather than a new build.
@@ -101,6 +107,29 @@ namespace TonightsTheNight.Core
                 (int)_config.GetFloat("features.air.maxHeight", 90f),
                 (int)_config.GetFloat("features.air.minHeight", 35f),
                 -1f, 0);
+        }
+
+        /// <summary>
+        /// A jet making passes over the city.
+        ///
+        /// Fast jets are a presence rather than a weapon here: they cannot loiter, and a fighter
+        /// tasked to attack a crowd mostly flies into a building. The default mission circles the
+        /// target at altitude, which is what a no-fly zone looks like from the ground. Every
+        /// value is config-exposed because TASK_PLANE_MISSION is community-documented.
+        /// </summary>
+        private void ApplyPlane(Ped pilot, Vehicle vehicle, Ped target)
+        {
+            GTA.Math.Vector3 over = target.Position;
+
+            Function.Call(Hash.TASK_PLANE_MISSION,
+                pilot, vehicle, 0, target,
+                over.X, over.Y, over.Z,
+                _config.GetInt("features.air.planeMission", 6),
+                _config.GetFloat("features.air.planeSpeed", 90f),
+                -1f,
+                _config.GetFloat("features.air.planeHeading", -1f),
+                (int)_config.GetFloat("features.air.planeMaxHeight", 260f),
+                (int)_config.GetFloat("features.air.planeMinHeight", 160f));
         }
 
         /// <summary>

@@ -1,5 +1,60 @@
 # Changelog
 
+## v0.5.0 — ships, jets, reinforcements, and a cheaper menu
+
+### Fixed — the menu halving your frame rate
+
+The most likely culprit is LemonUI's, not mine, but it is disableable. The instructional buttons
+in the bottom-right corner are a **Scaleform**, which is one of the more expensive things a
+script can put on screen, and it is redrawn every frame the menu is open. The banner is a texture
+draw on top of that, and mouse support plus edge-of-screen camera rotation both do work per frame
+whether or not you use them.
+
+The menu now runs without any of those by default. It keeps its title, items and descriptions.
+`menu.lightweight: false` gives you the banner and mouse back.
+
+Separately, **the riot pauses its own expensive half while the menu is open** — recruiting,
+spawning, retasking, chases and looting all wait. None of it needs to happen in the few seconds
+you spend reading a slider, and it was landing on top of the menu's draw cost.
+
+If the lightweight menu fixes it, it was the Scaleform. If it does not, the debug overlay's tick
+time will say whether the remaining cost is the mod or the library.
+
+### Added — reinforcements
+
+Escalation phases answer *how long has this been going on*. They could not answer *how badly is
+it going*, which is the difference between a deployment and a response: the army sent the same
+two trucks every fifteen seconds whether it was walking through the crowd or being wiped out.
+
+Every spawned member of a faction that dies now raises that faction's commitment. Waves get
+bigger, arrive sooner, and the ceiling on how many can be on the street rises with them, up to
+2.5× by default. Meet the army with nothing and the response stays a patrol; destroy three
+carloads and the next ones come in force, with a notification when a faction steps up.
+
+Per faction, deliberately — killing soldiers brings more soldiers, not more aliens.
+
+### Added — craft over the invasion
+
+GTA V's UFOs are props, not vehicles: there is nothing to fly and nobody to put inside one. So
+they are held at altitude over the riot and drifted, and **the aliens spawn underneath them**.
+That second half is what makes it read as an arrival rather than as a decoration.
+
+Model names are resolved at runtime with fallback, as everything here is. If none of the
+candidates exist in your install the invasion arrives without ships and says so in the log.
+
+### Added — jets
+
+Martial Law's final phase brings the air force. They stay high and circle: a fighter told to
+attack a street mostly flies into a building, so the mission is a presence rather than a weapon.
+Heights, speed and mission id are all in `features.air`.
+
+### Changed
+
+**The zone circle is off by default.** With the zone following you, a circle centred on your own
+blip tells you nothing. Turn it on if you anchor a riot somewhere and drive away from it.
+
+---
+
 ## v0.4.1 — release preparation
 
 No gameplay changes. This is the pass that makes the repository something a stranger can

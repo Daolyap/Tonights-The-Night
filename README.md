@@ -6,7 +6,7 @@ Nine riot modes built from **factions** — who they are, what they carry, who t
 they react when it starts. Modes and factions are JSON files, not code, so a custom faction needs
 no build step. Every optional feature is a switch with its own settings block.
 
-**Version 0.4.1.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
+**Version 0.5.0.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
 ScriptHookVDotNet 3 and [LemonUI](https://www.gta5-mods.com/tools/lemonui). **F6** opens the
 menu.
 
@@ -18,9 +18,9 @@ menu.
 | Pedestrian Chaos | A free-for-all. Only your passengers are on your side |
 | Gang War | Four gangs settle up at once |
 | Police State | Sirens on, driving through crowds, helicopters overhead |
-| Martial Law | Police, then infantry, then armour, air and sea |
+| Martial Law | Police, then infantry, then armour, helicopters, boats and jets |
 | Animal Uprising | Deliberately silly |
-| Invasion | Aliens, with weapons already in your game |
+| Invasion | Ships overhead, and aliens walking out from under them |
 | The Purge | Twelve minutes, then it stops |
 | Everything | All of it, escalating through four phases |
 
@@ -35,6 +35,9 @@ chase another rioter, come after you, or get out of your way. Four weights, all 
 **Escalation.** Riots build. Phases advance on elapsed time *or* body count, so a quiet riot
 still progresses and a bloodbath escalates immediately. Factions declare which phase they join
 at, which is what makes the army arrive late rather than at the first thrown punch.
+
+**Reinforcements.** A faction that takes losses sends more, sooner. Meet the army with nothing
+and the response stays a patrol; destroy three carloads and the next ones come in force.
 
 **Riot zones.** Confine it to a radius around you or let it run citywide. The single most
 effective performance control here.

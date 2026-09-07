@@ -78,6 +78,9 @@ namespace TonightsTheNight.Core
             {
                 Greet();
                 _menu.Process();
+
+                // Everything the riot does that can wait, waits while the menu is on screen.
+                _director.Paused = _menu.Visible;
                 _director.Tick();
                 _overlay.Draw(_director, _modes.Modes.Count);
                 CheckWatchedFiles();

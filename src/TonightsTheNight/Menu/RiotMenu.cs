@@ -60,10 +60,39 @@ namespace TonightsTheNight.Menu
 
         public void Process() { _pool.Process(); }
 
+        /// <summary>
+        /// Strips the parts of a LemonUI menu that cost the most to draw.
+        ///
+        /// The instructional buttons in the corner are a Scaleform, which is one of the more
+        /// expensive things a script can put on screen, and LemonUI redraws it every frame the
+        /// menu is open. The banner is a texture draw on top of that, and mouse support plus
+        /// edge-of-screen camera rotation both do work per frame whether or not you own a mouse.
+        ///
+        /// None of it is load-bearing: the menu keeps its title, its items and its descriptions.
+        /// Turn it off with menu.lightweight if you would rather have the banner back.
+        /// </summary>
+        private void Economise(NativeMenu menu)
+        {
+            if (!_config.GetBool("menu.lightweight", true)) { return; }
+
+            try
+            {
+                menu.Banner = null;
+                menu.Buttons.Clear();
+                menu.MouseBehavior = MenuMouseBehavior.Disabled;
+                menu.RotateCamera = false;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not apply the lightweight menu settings", ex);
+            }
+        }
+
         private void Build()
         {
             _root = new NativeMenu("Tonight's The Night", "RIOT CONTROL");
             _pool.Add(_root);
+            Economise(_root);
 
             BuildModeMenu();
             BuildTuningMenu();
@@ -117,6 +146,7 @@ namespace TonightsTheNight.Menu
         /// </summary>
         private NativeSubmenuItem AddSubMenu(NativeMenu submenu, string title, string description)
         {
+            Economise(submenu);
             NativeSubmenuItem item = _root.AddSubMenu(submenu);
             item.Title = title;
             item.Description = description;
@@ -343,8 +373,8 @@ namespace TonightsTheNight.Menu
             AddToggle(_zoneMenu, "Zone Follows You", "zone.followPlayer", true,
                 "On: the riot travels with you. Off: it stays where you started it.");
 
-            AddToggle(_zoneMenu, "Show Zone On Map", "zone.showOnMap", true,
-                "Draw the riot zone as a circle on the minimap.");
+            AddToggle(_zoneMenu, "Show Zone On Map", "zone.showOnMap", false,
+                "Draw the riot zone as a circle on the minimap. Only useful when the zone is not following you.");
         }
 
         private void BuildProfileMenu()
@@ -420,6 +450,16 @@ namespace TonightsTheNight.Menu
             AddToggle(_featuresMenu, "No Wanted Level During Purge", "features.purge.noWantedLevel", true,
                 "All crime is legal, so the game's own police lose interest. Your wanted ceiling is " +
                 "put back exactly as it was when the purge ends.");
+
+            AddToggle(_featuresMenu, "Reinforcements", "features.reinforcements.enabled", true,
+                "Factions that take losses send bigger waves, sooner. Off: the response never grows.");
+
+            AddToggle(_featuresMenu, "Craft Overhead", "features.craft.enabled", true,
+                "Ships in the sky during Invasion, with aliens arriving underneath them.");
+
+            AddToggle(_featuresMenu, "Lightweight Menu", "menu.lightweight", true,
+                "Drops this menu's banner, corner buttons and mouse support. The corner buttons are a "
+                + "Scaleform redrawn every frame, which is the expensive part. Turn off for the full look.");
 
             AddToggle(_featuresMenu, "Spawn Factions", "riot.spawnFactions", true,
                 "Off: only ambient pedestrians are used. No police, military, aliens or animals.");

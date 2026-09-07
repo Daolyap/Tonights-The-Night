@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.4.1";
+        public const string Version = "0.5.0";
 
         public static JsonValue Build()
         {
@@ -24,6 +24,11 @@ namespace TonightsTheNight.Config
             JsonValue menu = JsonValue.NewObject();
             menu.Set("key", JsonValue.Of("F6"));
             menu.Set("reloadKey", JsonValue.Of("F5"));
+            // Drops the parts of the menu that cost the most to draw: the instructional buttons
+            // in the corner (a Scaleform, redrawn every frame), the banner texture, mouse
+            // support and edge-of-screen camera rotation. The menu keeps its title, items and
+            // descriptions. Set false if you would rather have the banner and mouse back.
+            menu.Set("lightweight", JsonValue.Of(true));
             root.Set("menu", menu);
 
             JsonValue logging = JsonValue.NewObject();
@@ -164,7 +169,9 @@ namespace TonightsTheNight.Config
             zone.Set("mode", JsonValue.Of("radius"));     // radius | citywide
             zone.Set("radius", JsonValue.Of(300));
             zone.Set("followPlayer", JsonValue.Of(true));
-            zone.Set("showOnMap", JsonValue.Of(true));
+            // Off: with the zone following you, a circle centred on your own blip tells you
+            // nothing. Turn it on if you anchor the riot somewhere and drive away from it.
+            zone.Set("showOnMap", JsonValue.Of(false));
             root.Set("zone", zone);
 
             // Compatibility with other mods. These default to the conservative choice: this
@@ -255,6 +262,13 @@ namespace TonightsTheNight.Config
             air.Set("radius", JsonValue.Of(60));
             air.Set("maxHeight", JsonValue.Of(90));
             air.Set("minHeight", JsonValue.Of(35));
+            // Jets. They stay high: a fighter told to attack a street mostly flies into a
+            // building, so the default mission circles at altitude instead.
+            air.Set("planeMission", JsonValue.Of(6));
+            air.Set("planeSpeed", JsonValue.Of(90));
+            air.Set("planeHeading", JsonValue.Of(-1));
+            air.Set("planeMaxHeight", JsonValue.Of(260));
+            air.Set("planeMinHeight", JsonValue.Of(160));
             features.Set("air", air);
 
             // Car chases. Provocation-driven: hurt someone and drive away, and their side
@@ -313,6 +327,30 @@ namespace TonightsTheNight.Config
             looting.Set("getawaySpeed", JsonValue.Of(25));
             looting.Set("drivingStyle", JsonValue.Of(786603));
             features.Set("looting", looting);
+
+            // A faction that is losing sends more. Escalation phases answer "how long has this
+            // been going on"; this answers "how badly is it going", which is the difference
+            // between a deployment and a response.
+            JsonValue reinforcements = JsonValue.NewObject();
+            reinforcements.Set("enabled", JsonValue.Of(true));
+            // Each spawned member killed adds this much to that faction's wave size, cap and
+            // arrival rate. Sixteen losses reaches the ceiling at the default values.
+            reinforcements.Set("perLoss", JsonValue.Of(0.06));
+            reinforcements.Set("maxMultiplier", JsonValue.Of(2.5));
+            reinforcements.Set("announce", JsonValue.Of(true));
+            features.Set("reinforcements", reinforcements);
+
+            // Ships in the sky. Props rather than vehicles, because GTA V's UFOs are props -
+            // there is nothing to fly and nobody to put in one - so they are held at altitude
+            // and drifted. A mode declares its own; only the invasion has any.
+            JsonValue craft = JsonValue.NewObject();
+            craft.Set("enabled", JsonValue.Of(true));
+            craft.Set("maxActive", JsonValue.Of(4));
+            craft.Set("orbitSpeed", JsonValue.Of(0.06));
+            craft.Set("updateIntervalMs", JsonValue.Of(250));
+            craft.Set("dropScatter", JsonValue.Of(20));
+            craft.Set("blip", JsonValue.Of(true));
+            features.Set("craft", craft);
 
             JsonValue profiles = JsonValue.NewObject();
             profiles.Set("enabled", JsonValue.Of(true));

@@ -417,6 +417,22 @@ namespace TonightsTheNight.Factions
 
     // Only turns up when there is water within reach, which is most of the time in Vespucci
     // and never in Sandy Shores. A wave that finds nowhere to float is silently skipped.
+    ""jets"": {
+      ""name"": ""Air Force"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 2,
+      ""playerRelationship"": ""hate"",
+      ""armedChance"": 1.0, ""ammo"": 200, ""armour"": 100, ""accuracy"": 40,
+      ""weapons"": [ { ""name"": ""Pistol"", ""weight"": 1 } ],
+      ""spawn"": {
+        ""models"": [ ""s_m_y_pilot_01"", ""s_m_y_blackops_01"" ],
+        ""vehicles"": [ ""lazer"", ""hydra"" ],
+        ""vehicleType"": ""air"", ""flightHeight"": 220, ""footFallback"": false,
+        ""maxAlive"": 2, ""perWave"": 1, ""waveIntervalMs"": 70000,
+        ""inVehicleChance"": 1.0, ""occupants"": 1, ""vehiclesPerWave"": 1,
+        ""minDistance"": 250, ""maxDistance"": 420
+      },
+      ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""GreenLight"" }
+    },
+
     ""navy"": {
       ""name"": ""Coastal Patrol"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 2,
       ""playerRelationship"": ""hate"",
@@ -462,7 +478,9 @@ namespace TonightsTheNight.Factions
     { ""from"": ""infantry"",   ""to"": ""armour"",     ""value"": ""companion"", ""mutual"": true },
     { ""from"": ""infantry"",   ""to"": ""airsupport"", ""value"": ""companion"", ""mutual"": true },
     { ""from"": ""armour"",     ""to"": ""airsupport"", ""value"": ""companion"", ""mutual"": true },
-    { ""from"": ""infantry"",   ""to"": ""navy"",       ""value"": ""companion"", ""mutual"": true }
+    { ""from"": ""infantry"",   ""to"": ""navy"",       ""value"": ""companion"", ""mutual"": true },
+    { ""from"": ""jets"",       ""to"": ""civilians"",  ""value"": ""hate"", ""mutual"": true },
+    { ""from"": ""jets"",       ""to"": ""airsupport"", ""value"": ""companion"", ""mutual"": true }
   ],
 
   ""config"": {
@@ -539,6 +557,16 @@ namespace TonightsTheNight.Factions
   ""_stock"": true,
   ""name"": ""Invasion"",
   ""order"": 70,
+
+  // Ships overhead, and the scouts walk out from under them. Model names only, resolved at
+  // runtime - if none of these exist in your install the invasion simply arrives without
+  // ships rather than failing.
+  ""craft"": {
+    ""name"": ""Mothership"",
+    ""models"": [ ""p_spinning_anus_s"", ""prop_ufo_01"", ""p_ufo_s"" ],
+    ""count"": 2, ""height"": 115, ""orbitRadius"": 95
+  },
+
   ""description"": ""Green men, ray guns, and a city that was not ready. Uses only content already in your game."",
   ""enabled"": true,
   ""playerRelationship"": ""hate"",
@@ -555,7 +583,7 @@ namespace TonightsTheNight.Factions
   ""factions"": {
     ""scouts"": {
       ""name"": ""Scouts"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1,
-      ""playerRelationship"": ""hate"", ""armedChance"": 1.0, ""ammo"": 500, ""armour"": 60, ""accuracy"": 45, ""health"": 200,
+      ""playerRelationship"": ""hate"", ""arrivesByCraft"": true, ""armedChance"": 1.0, ""ammo"": 500, ""armour"": 60, ""accuracy"": 45, ""health"": 200,
       ""weapons"": [
         { ""name"": ""WEAPON_RAYPISTOL"", ""weight"": 4 },
         { ""name"": ""UnholyHellbringer"", ""weight"": 2 }
@@ -569,7 +597,7 @@ namespace TonightsTheNight.Factions
 
     ""hunters"": {
       ""name"": ""Hunters"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 1,
-      ""playerRelationship"": ""hate"", ""armedChance"": 1.0, ""ammo"": 800, ""armour"": 100, ""accuracy"": 60, ""health"": 350,
+      ""playerRelationship"": ""hate"", ""arrivesByCraft"": true, ""armedChance"": 1.0, ""ammo"": 800, ""armour"": 100, ""accuracy"": 60, ""health"": 350,
       ""weapons"": [
         { ""name"": ""Widowmaker"", ""weight"": 3 },
         { ""name"": ""UnholyHellbringer"", ""weight"": 2 },
