@@ -142,6 +142,10 @@ class Program
         failures += ConfigPathCoverage.Run();
 
         Console.WriteLine();
+        Console.WriteLine("--- release readiness ---");
+        failures += ReleaseReadinessTests.Run();
+
+        Console.WriteLine();
         Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : failures + " CHECK(S) FAILED");
         return failures == 0 ? 0 : 1;
     }

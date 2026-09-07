@@ -36,6 +36,7 @@ namespace TonightsTheNight.Factions
   ""_stock"": true,
 
   ""name"": ""Pedestrian Riot"",
+  ""order"": 10,
   // Two mobs out of one crowd is the whole mode, so pedestrians fighting pedestrians is
   // intended here. Saying so keeps the build from treating it as the Martial Law bug, where
   // the crowd turning on itself instead of on the army was exactly what went wrong.
@@ -123,6 +124,7 @@ namespace TonightsTheNight.Factions
         private const string Criminals = @"{
   ""_stock"": true,
   ""name"": ""Gang War"",
+  ""order"": 30,
   ""description"": ""Every gang in Los Santos settles up at once. Civilians are in the way."",
   ""enabled"": true,
   ""playerRelationship"": ""hate"",
@@ -225,6 +227,7 @@ namespace TonightsTheNight.Factions
         private const string Police = @"{
   ""_stock"": true,
   ""name"": ""Police State"",
+  ""order"": 40,
   ""description"": ""Sirens on, lights running, and nobody is walking away from a stop. The public is not your enemy here."",
   ""enabled"": true,
 
@@ -329,6 +332,7 @@ namespace TonightsTheNight.Factions
         private const string Military = @"{
   ""_stock"": true,
   ""name"": ""Martial Law"",
+  ""order"": 50,
   ""description"": ""The army takes Los Santos. Police hold the line, armour rolls in, helicopters hold station overhead."",
   ""enabled"": true,
   ""playerRelationship"": ""hate"",
@@ -471,6 +475,7 @@ namespace TonightsTheNight.Factions
         private const string Animals = @"{
   ""_stock"": true,
   ""name"": ""Animal Uprising"",
+  ""order"": 60,
   ""description"": ""The wildlife has had enough. Deeply silly, and that is the point."",
   ""enabled"": true,
   ""playerRelationship"": ""hate"",
@@ -533,6 +538,7 @@ namespace TonightsTheNight.Factions
         private const string Aliens = @"{
   ""_stock"": true,
   ""name"": ""Invasion"",
+  ""order"": 70,
   ""description"": ""Green men, ray guns, and a city that was not ready. Uses only content already in your game."",
   ""enabled"": true,
   ""playerRelationship"": ""hate"",
@@ -603,6 +609,7 @@ namespace TonightsTheNight.Factions
         private const string Purge = @"{
   ""_stock"": true,
   ""name"": ""The Purge"",
+  ""order"": 80,
   // Purgers hunt survivors, and both are pedestrians. Intended.
   ""crowdFightsItself"": true,
   ""description"": ""Twelve minutes. All crime legal. Emergency services suspended. Then it stops."",
@@ -674,6 +681,7 @@ namespace TonightsTheNight.Factions
         private const string Chaos = @"{
   ""_stock"": true,
   ""name"": ""Pedestrian Chaos"",
+  ""order"": 20,
   // A free-for-all, so yes, the crowd fights itself. That is the mode.
   ""crowdFightsItself"": true,
   ""description"": ""A free-for-all. Everyone kills everyone, the police included, and you are in it. The only people on your side are the ones in your car."",
@@ -781,6 +789,7 @@ namespace TonightsTheNight.Factions
         private const string Everything = @"{
   ""_stock"": true,
   ""name"": ""Everything"",
+  ""order"": 90,
   ""description"": ""Every faction at once. Needs a gameconfig and Heap Adjuster. Do not say you were not told."",
   ""enabled"": true,
   ""playerRelationship"": ""hate"",

@@ -36,6 +36,8 @@ namespace TonightsTheNight.Factions
                 return;
             }
 
+            // Read in a stable order; the menu order is decided after parsing, from each
+            // mode's own "order" field.
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
 
             foreach (string file in files)
@@ -64,6 +66,12 @@ namespace TonightsTheNight.Factions
                     Log.Error("Could not load mode '" + id + "'", ex);
                 }
             }
+
+            Modes.Sort(delegate (RiotMode a, RiotMode b)
+            {
+                int byOrder = a.Order.CompareTo(b.Order);
+                return byOrder != 0 ? byOrder : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+            });
 
             Log.Info("Loaded " + Modes.Count + " mode(s): " + string.Join(", ", Names()));
         }

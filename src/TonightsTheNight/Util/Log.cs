@@ -169,9 +169,11 @@ namespace TonightsTheNight.Util
         }
 
         /// <summary>
-        /// Every path candidate and where we landed. Logged at startup and shown in the menu,
-        /// because a mod writing its files somewhere unexpected must never again be something
-        /// you can only discover by hunting the disk.
+        /// Every path candidate and where we landed, written to the log at startup.
+        ///
+        /// It is here for bug reports: "the mod created no config folder" is unanswerable
+        /// without knowing which directory it decided it was in, and a user should never have
+        /// to hunt the disk to find that out for us.
         /// </summary>
         public static string Diagnostics()
         {

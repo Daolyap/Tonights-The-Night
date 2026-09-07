@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.4.0";
+        public const string Version = "0.4.1";
 
         public static JsonValue Build()
         {

@@ -6,7 +6,7 @@
 |---|---|
 | Game | GTA V **Legacy** (the reference target) or Enhanced |
 | Required | [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/) |
-| Required | ScriptHookVDotNet 3 — stock, or the Enhanced fork if you run Enhanced |
+| Required | [ScriptHookVDotNet 3](https://github.com/scripthookvdotnet/scripthookvdotnet) — stock, or the Enhanced fork if you run Enhanced |
 | Required | [LemonUI](https://www.gta5-mods.com/tools/lemonui) — the `LemonUI.SHVDN3.dll` from its SHVDN3 folder |
 | Strongly recommended | a modern **gameconfig** and **Heap Adjuster** |
 
@@ -16,9 +16,14 @@ crash, and it will look like this mod's fault.
 
 ## Install
 
-1. Drop `TonightsTheNight.dll` into your `GTA V/scripts/` folder.
-2. Make sure `LemonUI.SHVDN3.dll` is in the same folder.
-3. Start the game and load into story mode.
+1. Install ScriptHookV, ScriptHookVDotNet 3 and LemonUI first, if you have not already.
+2. Drop `TonightsTheNight.dll` into your `GTA V/scripts/` folder.
+3. Make sure `LemonUI.SHVDN3.dll` is in the same folder.
+4. Start the game and load into story mode.
+
+You should see a notification once you have control of your character. If you do not, check
+`scripts/ScriptHookVDotNet.log` — a missing LemonUI is the usual cause, and it fails before this
+mod can report anything itself.
 
 On first run the mod creates `scripts/TonightsTheNight/` containing:
 
@@ -28,6 +33,9 @@ user.json          your overrides - never touched by an update
 modes/             riot modes, one JSON file each
 profiles/          saved setups
 ```
+
+To uninstall, delete `TonightsTheNight.dll`. Delete `scripts/TonightsTheNight/` too if you do not
+want to keep your settings. Nothing is written anywhere else.
 
 ## Keys
 
@@ -82,12 +90,16 @@ shipped mode name are ever rewritten.
 This mod is built to sit alongside police overhauls, wanted-system replacements, LSPDFR-style
 packs and 6-star mods rather than compete with them. Two design decisions do the work:
 
-**1. It never touches the wanted system.** Riot police are built from relationship groups, not
+**1. It does not use the wanted system.** Riot police are built from relationship groups, not
 wanted levels. That was chosen because the wanted system is player-centric and fights us — but
 the happy side effect is that it's exactly the system an overhaul pack replaces, so the two
 never collide. There is a `compatibility.manageWantedSystem` switch, it defaults to **off**, and
 it is expected to stay off. Every wanted-system call in the codebase routes through one gate
 that respects it.
+
+There is exactly one exception, described at the end of this section: The Purge lowers your
+wanted ceiling for the length of its window, because "all crime is legal" is the entire premise.
+It restores whatever the ceiling was.
 
 **2. It leaves police and emergency peds alone.** Cops, SWAT, army, medics and firefighters are
 never recruited into a faction. An overhaul pack owns those peds; this mod hijacking them would
@@ -114,9 +126,13 @@ Things that will still interact, by design and harmlessly:
   in the street is your pack's business to respond to, and it should respond exactly as it
   always does.
 
-When riot police arrive in a later version they'll be a separate faction with their own
-relationship group, not a modification of the game's police. Your pack's dispatch, stars and
-units keep running untouched alongside them.
+Riot police are a separate faction with their own relationship group, not a modification of the
+game's police. Your pack's dispatch, stars and units keep running untouched alongside them.
+
+**One deliberate exception.** During The Purge all crime is legal, so your wanted *ceiling* is
+lowered for the length of the window and restored to exactly what it was when it ends — if your
+pack gives you six stars, you have six stars again the moment the purge is over. Switch it off
+with `features.purge.noWantedLevel: false`, or in the menu under **Features**.
 
 ## When something goes wrong
 

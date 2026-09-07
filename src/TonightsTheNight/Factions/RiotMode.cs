@@ -40,6 +40,15 @@ namespace TonightsTheNight.Factions
         /// <summary>How this mode treats the player when they have not picked a side.</summary>
         public int PlayerRelationship { get; private set; }
 
+        /// <summary>
+        /// Where this mode sits in the menu. Lower comes first; ties break alphabetically.
+        ///
+        /// Sorting by filename put Invasion at the top and Pedestrian Riot seventh, so the first
+        /// thing a new player saw was the strangest mode in the mod. Anything a user writes
+        /// themselves defaults to the end of the list, in alphabetical order.
+        /// </summary>
+        public int Order { get; private set; }
+
         public static RiotMode FromJson(string id, JsonValue node)
         {
             var mode = new RiotMode
@@ -53,7 +62,8 @@ namespace TonightsTheNight.Factions
                 Escalation = node["escalation"],
                 Ambience = node["ambience"],
                 Purge = node["purge"],
-                PlayerRelationship = ParseRelationship(node["playerRelationship"].AsString("neutral"))
+                PlayerRelationship = ParseRelationship(node["playerRelationship"].AsString("neutral")),
+                Order = node["order"].AsInt(1000)
             };
 
             foreach (var pair in node["factions"].Members)

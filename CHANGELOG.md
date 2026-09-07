@@ -1,5 +1,57 @@
 # Changelog
 
+## v0.4.1 — release preparation
+
+No gameplay changes. This is the pass that makes the repository something a stranger can
+download rather than something one tester was being handed.
+
+### Removed
+
+**The file-locator menu item** and the startup notification that printed your config path. Both
+existed to debug the mod's own installation during testing; the path resolution is still written
+to the log, where it belongs for bug reports.
+
+### Fixed
+
+**The assembly version had drifted two releases behind** the version the mod reports in game —
+0.2.0 in the DLL's file properties against 0.4.0 in the loading notification, which would make
+any bug report unattributable. There is now a build check that fails if they disagree, and if
+the changelog or readme has not been updated to match.
+
+**Modes appeared in alphabetical filename order**, so the first thing a new player saw was
+Invasion and Pedestrian Riot was seventh. Modes now declare their own menu position; anything
+you write yourself goes to the end of the list.
+
+**The install guide still promised riot police as future work.** They shipped in v0.2.0.
+
+### Added
+
+**A licence.** MIT.
+
+**`docs/DESIGN.md`** — how the mod works and why it is built the way it is. Worth reading before
+writing your own mode.
+
+**`docs/PUBLISHING.md`** — the release checklist, the archive layout, and the listing text.
+
+**A release-readiness test suite.** It checks that version numbers agree across the project, that
+the debug overlay and verbose logging ship off, that the wanted system and emergency services are
+left alone by default, that no development aids remain in the menu, and that the licence and
+documentation exist.
+
+**Proper release packaging.** CI now produces a `TonightsTheNight-vX.Y.Z.zip` laid out the way a
+player expects — drag `scripts/` into the game folder — with the readme, install guide, changelog
+and licence alongside it. Tagging `vX.Y.Z` publishes a GitHub release with the archive attached.
+
+Dependencies are linked rather than bundled: their licences are theirs to distribute under, and a
+stale bundled copy of LemonUI is worse for a user than no copy.
+
+### Removed from the repository
+
+The throwaway design plan and the tester-specific script, both of which were written to one
+person and had gone stale. Their durable content is in `docs/DESIGN.md`.
+
+---
+
 ## v0.4.0 — the crowd picks the right enemy
 
 Your diagnosis was right and it was one design mistake, not several: **a mode had one answer for

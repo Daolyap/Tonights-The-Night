@@ -98,23 +98,6 @@ namespace TonightsTheNight.Menu
             reload.Activated += (sender, args) => _reloadRequested();
             _root.Add(reload);
 
-            // Where the files went should never again be something you can only find by
-            // searching the disk.
-            var paths = new NativeItem("Show File Locations", "Print the config and log paths on screen and to the log.");
-            paths.Activated += (sender, args) =>
-            {
-                Log.Info("Path resolution (requested from menu):");
-                foreach (string line in Paths.Diagnostics().Split('\n'))
-                {
-                    Log.Info("  " + line.TrimEnd('\r'));
-                }
-
-                GTA.UI.Notification.Show("~b~Config:~s~ " + Paths.ConfigDir);
-                GTA.UI.Screen.ShowSubtitle(Paths.Diagnostics().Replace(Environment.NewLine, "~n~"), 12000);
-                _root.Visible = false;
-            };
-            _root.Add(paths);
-
             _root.Shown += (sender, args) => RefreshStopItem();
             RefreshStopItem();
         }

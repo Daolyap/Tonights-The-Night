@@ -3,6 +3,7 @@ name: build
 on:
   push:
     branches: [ "**" ]
+    tags: [ "v*" ]
   pull_request:
   workflow_dispatch:
 
@@ -19,21 +20,38 @@ jobs:
 
       # The mod targets .NET Framework 4.8 because SHVDN does. Reference assemblies let that
       # build on Linux without Mono, so no Windows runner is needed.
-      - name: Test config layer
+      - name: Test
         run: dotnet run --project tests/ConfigTests/ConfigTests.csproj -c Release
 
       - name: Build mod
         run: dotnet build src/TonightsTheNight/TonightsTheNight.csproj -c Release
 
-      - name: Stage release layout
+      - name: Read version
+        id: version
         run: |
-          mkdir -p out/scripts
-          cp src/TonightsTheNight/bin/Release/TonightsTheNight.dll out/scripts/
-          cp INSTALL.md out/
-          echo "Built from ${GITHUB_SHA} on $(date -u +%Y-%m-%dT%H:%M:%SZ)" > out/BUILD.txt
+          VERSION=$(grep -oP '(?<=<Version>)[^<]+' src/TonightsTheNight/TonightsTheNight.csproj)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      # The archive layout a player expects: drag the scripts folder into the game directory.
+      # Dependencies are linked rather than bundled - their licences are theirs to distribute
+      # under, and a stale copy of LemonUI is worse than no copy.
+      - name: Stage release archive
+        run: |
+          STAGE="TonightsTheNight-v${{ steps.version.outputs.version }}"
+          mkdir -p "out/${STAGE}/scripts"
+          cp src/TonightsTheNight/bin/Release/TonightsTheNight.dll "out/${STAGE}/scripts/"
+          cp README.md INSTALL.md CHANGELOG.md LICENSE "out/${STAGE}/"
+          cd out && zip -r "${STAGE}.zip" "${STAGE}" && rm -rf "${STAGE}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: TonightsTheNight-${{ github.sha }}
-          path: out/
+          name: TonightsTheNight-v${{ steps.version.outputs.version }}
+          path: out/*.zip
           if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*.zip
+          generate_release_notes: true
