@@ -145,7 +145,7 @@ namespace TonightsTheNight.Util
         public static JsonValue Parse(string text)
         {
             int index = 0;
-            JsonValue value = ParseValue(text, ref index);
+            JsonValue value = ParseValue(text, ref index, 0);
             SkipTrivia(text, ref index);
             if (index < text.Length)
             {
@@ -196,7 +196,18 @@ namespace TonightsTheNight.Util
             }
         }
 
-        private static JsonValue ParseValue(string s, ref int i)
+        /// <summary>
+        /// How deep an object or array may nest.
+        ///
+        /// The parser recurses, and .NET cannot catch a StackOverflowException — it takes the
+        /// whole process with it, which here means GTA V closing with no message and nothing in
+        /// the log. Mode files get shared between players, so this parser reads files written by
+        /// strangers; one of them being corrupt must not be able to do that. The deepest
+        /// structure any shipped mode reaches is about six.
+        /// </summary>
+        private const int MaxDepth = 64;
+
+        private static JsonValue ParseValue(string s, ref int i, int depth)
         {
             SkipTrivia(s, ref i);
             if (i >= s.Length) { throw new FormatException("Unexpected end of input."); }
@@ -204,8 +215,8 @@ namespace TonightsTheNight.Util
             char c = s[i];
             switch (c)
             {
-                case '{': return ParseObject(s, ref i);
-                case '[': return ParseArray(s, ref i);
+                case '{': return ParseObject(s, ref i, depth);
+                case '[': return ParseArray(s, ref i, depth);
                 case '"':
                 case '\'': return Of(ParseString(s, ref i));
             }
@@ -225,8 +236,10 @@ namespace TonightsTheNight.Util
             return true;
         }
 
-        private static JsonValue ParseObject(string s, ref int i)
+        private static JsonValue ParseObject(string s, ref int i, int depth)
         {
+            if (depth >= MaxDepth) { throw new FormatException("Nested more than " + MaxDepth + " levels deep at character " + i + "."); }
+
             JsonValue result = NewObject();
             i++; // '{'
             while (true)
@@ -241,7 +254,7 @@ namespace TonightsTheNight.Util
                 if (i >= s.Length || s[i] != ':') { throw new FormatException("Expected ':' after key '" + key + "'."); }
                 i++;
 
-                result.Set(key, ParseValue(s, ref i));
+                result.Set(key, ParseValue(s, ref i, depth + 1));
 
                 SkipTrivia(s, ref i);
                 if (i < s.Length && s[i] == ',') { i++; continue; }   // trailing commas tolerated
@@ -259,8 +272,10 @@ namespace TonightsTheNight.Util
             return s.Substring(start, i - start);
         }
 
-        private static JsonValue ParseArray(string s, ref int i)
+        private static JsonValue ParseArray(string s, ref int i, int depth)
         {
+            if (depth >= MaxDepth) { throw new FormatException("Nested more than " + MaxDepth + " levels deep at character " + i + "."); }
+
             JsonValue result = NewArray();
             i++; // '['
             while (true)
@@ -269,7 +284,7 @@ namespace TonightsTheNight.Util
                 if (i >= s.Length) { throw new FormatException("Unterminated array."); }
                 if (s[i] == ']') { i++; return result; }
 
-                result.Add(ParseValue(s, ref i));
+                result.Add(ParseValue(s, ref i, depth + 1));
 
                 SkipTrivia(s, ref i);
                 if (i < s.Length && s[i] == ',') { i++; continue; }

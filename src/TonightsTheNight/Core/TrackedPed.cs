@@ -46,6 +46,15 @@ namespace TonightsTheNight.Core
         public Prop Loot;
 
         /// <summary>
+        /// True while this ped has a looting job, whether or not it is carrying anything.
+        ///
+        /// The prop used to double as the flag, so a car thief - who carries nothing - was
+        /// invisible to the Director and had their theft cancelled six seconds in, and could be
+        /// handed a second job while still walking to the first car.
+        /// </summary>
+        public bool Looting;
+
+        /// <summary>
         /// What this ped decided to do about being behind a wheel. Rolled once and kept, so a
         /// driver who set off after you does not change their mind on the next retask.
         /// </summary>

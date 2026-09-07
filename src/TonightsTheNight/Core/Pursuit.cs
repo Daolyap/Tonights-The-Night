@@ -207,7 +207,7 @@ namespace TonightsTheNight.Core
 
             foreach (TrackedPed entry in tracked)
             {
-                if (entry.InPursuit || entry.Loot != null || !entry.IsUsable) { continue; }
+                if (entry.InPursuit || entry.Looting || !entry.IsUsable) { continue; }
                 if (entry.Reaction != Reaction.Fight) { continue; }
                 if (!CanDrive(entry.Ped)) { continue; }
                 if (!_grudges.ContainsKey(entry.Faction.Id)) { continue; }
@@ -348,7 +348,7 @@ namespace TonightsTheNight.Core
 
             foreach (TrackedPed entry in tracked)
             {
-                if (entry.InPursuit || entry.Loot != null || !entry.IsUsable) { continue; }
+                if (entry.InPursuit || entry.Looting || !entry.IsUsable) { continue; }
                 if (entry.Reaction != Reaction.Fight) { continue; }
                 if (!CanDrive(entry.Ped)) { continue; }
                 if (entry.Faction != chase.Faction) { continue; }

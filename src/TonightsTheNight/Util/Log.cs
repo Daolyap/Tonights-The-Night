@@ -17,6 +17,11 @@ namespace TonightsTheNight.Util
         private static string _path;
         private static bool _failed;
 
+        private const int FlushIntervalMs = 1000;
+
+        private static readonly StringBuilder _pending = new StringBuilder();
+        private static int _lastFlush;
+
         public static LogLevel Threshold = LogLevel.Info;
 
         public static string Path
@@ -37,6 +42,8 @@ namespace TonightsTheNight.Util
             lock (Gate)
             {
                 _failed = false;
+                _pending.Length = 0;
+                _lastFlush = Environment.TickCount;
                 try
                 {
                     string dir = System.IO.Path.GetDirectoryName(Path);
@@ -78,6 +85,14 @@ namespace TonightsTheNight.Util
             }
         }
 
+        /// <summary>
+        /// Buffered, and flushed on an interval rather than per line.
+        ///
+        /// Every message used to open, append to and close the file. That is synchronous disk
+        /// I/O on the game thread, and at the Debug level testers are asked to enable it fires
+        /// several times a frame - so the one session anybody is asked to capture is the one
+        /// that stutters, and the frame times recorded in the log are polluted by the logging.
+        /// </summary>
         private static void Write(LogLevel level, string message)
         {
             if (level < Threshold || _failed)
@@ -87,18 +102,47 @@ namespace TonightsTheNight.Util
 
             lock (Gate)
             {
-                try
+                _pending.Append(DateTime.Now.ToString("HH:mm:ss.fff"))
+                        .Append(" [").Append(level.ToString().ToUpperInvariant()).Append("] ")
+                        .AppendLine(message);
+
+                // Warnings and errors reach the disk immediately. The run that produces one is
+                // quite often the run that ends before a timer would have fired, and a hard
+                // crash is precisely when the log has to already be there.
+                bool urgent = level >= LogLevel.Warn || _pending.Length > 16384;
+
+                if (urgent || Environment.TickCount - _lastFlush >= FlushIntervalMs)
                 {
-                    File.AppendAllText(
-                        Path,
-                        DateTime.Now.ToString("HH:mm:ss.fff") + " [" + level.ToString().ToUpperInvariant() + "] " + message + Environment.NewLine,
-                        Encoding.UTF8);
+                    FlushLocked();
                 }
-                catch (Exception)
-                {
-                    // A log that throws is worse than no log. Give up quietly for the session.
-                    _failed = true;
-                }
+            }
+        }
+
+        /// <summary>
+        /// Writes anything buffered. Called on shutdown, so a crash-adjacent session still has
+        /// its last lines on disk.
+        /// </summary>
+        public static void Flush()
+        {
+            lock (Gate) { FlushLocked(); }
+        }
+
+        private static void FlushLocked()
+        {
+            _lastFlush = Environment.TickCount;
+
+            if (_pending.Length == 0 || _failed) { return; }
+
+            try
+            {
+                File.AppendAllText(Path, _pending.ToString(), Encoding.UTF8);
+                _pending.Length = 0;
+            }
+            catch (Exception)
+            {
+                // A log that throws is worse than no log. Give up quietly for the session.
+                _failed = true;
+                _pending.Length = 0;
             }
         }
     }

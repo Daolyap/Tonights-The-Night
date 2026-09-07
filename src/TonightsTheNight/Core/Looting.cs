@@ -142,7 +142,7 @@ namespace TonightsTheNight.Core
             {
                 TrackedPed entry = tracked[(start + offset) % tracked.Count];
 
-                if (entry.InPursuit || entry.Loot != null || !entry.IsUsable) { continue; }
+                if (entry.InPursuit || entry.Looting || !entry.IsUsable) { continue; }
                 if (entry.Ped.IsInVehicle()) { continue; }
 
                 // Fighters are busy. Looting is what the people who were never going to fight
@@ -175,6 +175,7 @@ namespace TonightsTheNight.Core
 
             if (!stole && !StartCarry(job)) { return; }
 
+            entry.Looting = true;
             _jobs.Add(job);
             Total++;
         }
@@ -302,6 +303,7 @@ namespace TonightsTheNight.Core
         private void End(LootJob job)
         {
             TrackedPed entry = job.Entry;
+            entry.Looting = false;
 
             try
             {

@@ -132,6 +132,24 @@ class Program
             Check("TryParse survives: " + (bad.Length > 20 ? bad.Substring(0, 20) : bad), ok);
         }
 
+        // A stack overflow cannot be caught in .NET - it takes the process, which here means
+        // GTA V closing with no message and nothing in the log. Mode files get shared between
+        // players, so this parser reads files written by strangers.
+        Console.WriteLine("--- deeply nested input must be rejected, not fatal ---");
+        {
+            JsonValue deep; string deepError;
+            bool bombRejected = !JsonValue.TryParse(new string('[', 100000) + new string(']', 100000), out deep, out deepError);
+            Check("a nesting bomb is rejected", bombRejected);
+
+            bool siblingsFine = JsonValue.TryParse("[[1],[2],[3],[4],[5]]", out deep, out deepError);
+            Check("siblings are not nesting", siblingsFine);
+
+            bool realShape = JsonValue.TryParse(
+                "{\"factions\":{\"a\":{\"spawn\":{\"models\":[\"x\"]},\"blip\":{\"enabled\":true}}}}",
+                out deep, out deepError);
+            Check("a real mode shape still parses", realShape);
+        }
+
         Console.WriteLine("--- every shipped riot mode ---");
         failures += StockModeTests.Run();
 

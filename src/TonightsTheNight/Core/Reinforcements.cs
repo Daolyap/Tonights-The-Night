@@ -75,6 +75,12 @@ namespace TonightsTheNight.Core
             float ceiling = Math.Max(1f, _config.GetFloat("features.reinforcements.maxMultiplier", 2.5f));
 
             float multiplier = 1f + LossesFor(faction) * perLoss;
+
+            // Clamped at both ends. The spawner divides the wave interval by this, so a negative
+            // perLoss - a reasonable thing to try when you want a losing faction to back off -
+            // could reach zero and turn the next-wave time into int.MinValue, firing a wave
+            // every tick forever.
+            if (multiplier < 1f) { return 1f; }
             return multiplier > ceiling ? ceiling : multiplier;
         }
 

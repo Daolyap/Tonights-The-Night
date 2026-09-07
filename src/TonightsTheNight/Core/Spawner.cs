@@ -157,9 +157,9 @@ namespace TonightsTheNight.Core
             Model vehicleModel;
             if (!_models.TryResolve(faction.Spawn.Vehicles, out vehicleModel) || !_models.Load(vehicleModel))
             {
-                // None of the declared vehicles are installed. Walking in beats not arriving,
-                // except where walking in makes no sense.
-                if (faction.Spawn.FootFallback) { SpawnFootWave(faction, anchor, pedModel, spawned); }
+                // No fallback here. This runs once per vehicle in the wave, so falling back to
+                // foot inside it spawned a full foot wave per vehicle - double or triple the
+                // declared size. SpawnWave's own "nothing arrived" branch handles it once.
                 return;
             }
 
@@ -176,6 +176,10 @@ namespace TonightsTheNight.Core
 
             Vehicle vehicle = World.CreateVehicle(vehicleModel, point, (float)(_random.NextDouble() * 360.0));
             if (vehicle == null || !vehicle.Exists()) { return; }
+
+            // Where this vehicle's own occupants start in the shared list, so an empty vehicle
+            // can be told apart from one whose crew simply came after somebody else's.
+            int firstSeat = spawned.Count;
 
             vehicle.IsPersistent = false;
             Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle, true, true, false);
@@ -205,8 +209,12 @@ namespace TonightsTheNight.Core
                 spawned.Add(ped);
             }
 
-            if (spawned.Count == 0)
+            if (spawned.Count == firstSeat)
             {
+                // Nobody made it in - the ped pool is spent. Testing the shared list instead
+                // left the second and later vehicles of a wave abandoned in the street with
+                // their engines running and sirens on, registered nowhere and cleaned up by
+                // nothing.
                 vehicle.Delete();
             }
         }

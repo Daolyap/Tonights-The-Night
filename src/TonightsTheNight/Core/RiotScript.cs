@@ -150,6 +150,12 @@ namespace TonightsTheNight.Core
             {
                 Log.Error("Abort cleanup failed", ex);
             }
+            finally
+            {
+                // The log is buffered, so the lines describing a shutdown are exactly the ones
+                // that would otherwise never reach the disk.
+                Log.Flush();
+            }
         }
 
         /// <summary>

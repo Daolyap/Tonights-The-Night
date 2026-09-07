@@ -155,11 +155,14 @@ namespace TonightsTheNight.Core
             bool requireFacing = _config.GetBool("features.perception.requireFacing", false);
             int samples = Math.Max(1, _config.GetInt("features.perception.samplesPerCheck", 6));
             int examined = 0;
+            int walked = 0;
 
             // Round-robin rather than nearest-first: a raycast per ped is the expensive part, and
             // over a couple of seconds this covers the whole crowd anyway.
             for (int offset = 0; offset < tracked.Count && examined < samples; offset++)
             {
+                walked = offset + 1;
+
                 TrackedPed entry = tracked[(_cursor + offset) % tracked.Count];
 
                 if (!entry.IsUsable) { continue; }
@@ -188,7 +191,11 @@ namespace TonightsTheNight.Core
                 }
             }
 
-            _cursor = tracked.Count == 0 ? 0 : (_cursor + samples) % tracked.Count;
+            // Advance past everything actually walked, not just the traces spent. Rewinding to
+            // the sample count meant a crowd where most peds are fleeing or out of range got
+            // re-scanned from the same place every check - hundreds of position reads a second,
+            // and the whole crowd never covered.
+            _cursor = (_cursor + Math.Max(1, walked)) % tracked.Count;
             return null;
         }
 

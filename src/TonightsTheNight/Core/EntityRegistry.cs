@@ -21,6 +21,15 @@ namespace TonightsTheNight.Core
         private readonly Dictionary<int, TrackedPed> _byHandle = new Dictionary<int, TrackedPed>();
 
         public int Count { get { return _tracked.Count; } }
+
+        /// <summary>
+        /// Live blips, maintained rather than recounted. The cap is consulted once per recruit,
+        /// and walking the tracked list to answer it was quadratic in the hot path.
+        /// </summary>
+        public int BlipCount { get; private set; }
+
+        /// <summary>Called by the Director once a blip has actually been created.</summary>
+        public void NoteBlipAdded() { BlipCount++; }
         public IReadOnlyList<TrackedPed> Tracked { get { return _tracked; } }
 
         public bool Contains(Ped ped)
@@ -73,7 +82,27 @@ namespace TonightsTheNight.Core
             if (restore) { Restore(entry); }
 
             _tracked.Remove(entry);
-            if (entry.Ped != null) { _byHandle.Remove(entry.Ped.Handle); }
+            Unindex(entry);
+        }
+
+        /// <summary>
+        /// Drops the handle mapping only when it still points at this entry.
+        ///
+        /// Handles are recycled: a dead rioter's handle can be reissued and re-recruited before
+        /// the old row is pruned, at which point _byHandle points at the new entry. Removing
+        /// blindly by handle unindexed the live one, so it was recruited a second time - two
+        /// rows, two blips, conditioned and armed twice - and its car mates could no longer see
+        /// it to share a faction with.
+        /// </summary>
+        private void Unindex(TrackedPed entry)
+        {
+            if (entry.Ped == null) { return; }
+
+            TrackedPed indexed;
+            if (_byHandle.TryGetValue(entry.Ped.Handle, out indexed) && indexed == entry)
+            {
+                _byHandle.Remove(entry.Ped.Handle);
+            }
         }
 
         /// <summary>
@@ -90,27 +119,57 @@ namespace TonightsTheNight.Core
 
                 DeleteBlip(entry);
                 DeleteLoot(entry);
-                if (entry.Ped != null) { _byHandle.Remove(entry.Ped.Handle); }
+                Unindex(entry);
                 _tracked.RemoveAt(i);
                 removed++;
             }
             return removed;
         }
 
-        public void RestoreAll()
+        public void RestoreAll() { ReleaseAll(true); }
+
+        /// <summary>
+        /// Lets go of every tracked ped, restoring them or not.
+        ///
+        /// The tracking always ends either way. Leaving the list populated because
+        /// riot.restoreWorldOnStop was off stranded every entry and its blip: the next mode
+        /// found the registry already at maxTrackedPeds and never recruited anybody, while the
+        /// stale rows pointed at relationship groups that had since been deleted.
+        /// </summary>
+        public void ReleaseAll(bool restore)
         {
-            Log.Info("Restoring " + _tracked.Count + " tracked ped(s).");
+            Log.Info((restore ? "Restoring " : "Releasing ") + _tracked.Count + " tracked ped(s).");
 
             foreach (TrackedPed entry in _tracked)
             {
-                Restore(entry);
+                if (restore)
+                {
+                    Restore(entry);
+                    continue;
+                }
+
+                // Not restoring still means our own additions come off: a blip or a prop we
+                // created is ours whatever the player wants done with the ped underneath.
+                DeleteBlip(entry);
+                DeleteLoot(entry);
+                entry.InPursuit = false;
+
+                try
+                {
+                    if (entry.Ped != null && entry.Ped.Exists()) { entry.Ped.MarkAsNoLongerNeeded(); }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Failed to release a ped", ex);
+                }
             }
 
             _tracked.Clear();
             _byHandle.Clear();
+            BlipCount = 0;
         }
 
-        private static void Restore(TrackedPed entry)
+        private void Restore(TrackedPed entry)
         {
             DeleteBlip(entry);
             DeleteLoot(entry);
@@ -174,22 +233,24 @@ namespace TonightsTheNight.Core
                 Log.Error("Failed to delete a loot prop", ex);
             }
             entry.Loot = null;
+            entry.Looting = false;
         }
 
-        private static void DeleteBlip(TrackedPed entry)
+        private void DeleteBlip(TrackedPed entry)
         {
+            if (entry.Blip == null) { return; }
+
             try
             {
-                if (entry.Blip != null && entry.Blip.Exists())
-                {
-                    entry.Blip.Delete();
-                }
+                if (entry.Blip.Exists()) { entry.Blip.Delete(); }
             }
             catch (Exception ex)
             {
                 Log.Error("Failed to delete a blip", ex);
             }
+
             entry.Blip = null;
+            if (BlipCount > 0) { BlipCount--; }
         }
     }
 }

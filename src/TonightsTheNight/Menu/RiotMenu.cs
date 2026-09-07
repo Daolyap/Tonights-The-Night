@@ -21,6 +21,17 @@ namespace TonightsTheNight.Menu
     {
         private readonly ObjectPool _pool = new ObjectPool();
         private readonly List<Action> _refreshers = new List<Action>();
+
+        /// <summary>
+        /// Set while Rebuild is pushing disk values back into the controls.
+        ///
+        /// LemonUI raises ValueChanged, CheckboxChanged and ItemChanged from the property
+        /// setters, so refreshing a control re-entered its own handler and wrote the value
+        /// straight back into the live layer. Because the live layer wins over user.json, every
+        /// reload silently froze those keys for the rest of the session and profiles saved
+        /// settings the player had never touched.
+        /// </summary>
+        private bool _refreshing;
         private readonly ConfigStore _config;
         private readonly Director _director;
         private readonly ModeLibrary _modes;
@@ -50,13 +61,25 @@ namespace TonightsTheNight.Menu
             Build();
         }
 
+        /// <summary>
+        /// Any menu in the pool, not just the root.
+        ///
+        /// LemonUI closes the parent when you step into a submenu, so the root is hidden for
+        /// nearly all of the time the menu is actually on screen. Reading the root alone meant
+        /// the Director never paused where it mattered, and F6 opened a second menu on top of
+        /// the one already open and fed input to both.
+        /// </summary>
         public bool Visible
         {
-            get { return _root.Visible; }
-            set { _root.Visible = value; }
+            get { return _pool.AreAnyVisible; }
+            set
+            {
+                if (value) { _root.Visible = true; }
+                else { _pool.HideAll(); }
+            }
         }
 
-        public void Toggle() { _root.Visible = !_root.Visible; }
+        public void Toggle() { Visible = !Visible; }
 
         public void Process() { _pool.Process(); }
 
@@ -173,7 +196,7 @@ namespace TonightsTheNight.Menu
                     {
                         _director.Start(captured);
                         RefreshStopItem();
-                        _root.Visible = false;
+                        Visible = false;
                     }
                     catch (Exception ex)
                     {
@@ -244,8 +267,9 @@ namespace TonightsTheNight.Menu
             picker.ItemChanged += (sender, args) =>
             {
                 string id = WeaponPresets.Ids[picker.SelectedIndex];
-                _config.SetLive("weapons.preset", JsonValue.Of(id));
                 picker.Description = WeaponPresets.DescriptionOf(id);
+                if (_refreshing) { return; }
+                _config.SetLive("weapons.preset", JsonValue.Of(id));
             };
 
             _weaponMenu.Add(picker);
@@ -373,7 +397,11 @@ namespace TonightsTheNight.Menu
                 "Citywide costs frames and loses the contrast of one district in flames while the rest carries on.",
                 labels);
             mode.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("zone.mode", "radius")));
-            mode.ItemChanged += (sender, args) => _config.SetLive("zone.mode", JsonValue.Of(values[mode.SelectedIndex]));
+            mode.ItemChanged += (sender, args) =>
+            {
+                if (_refreshing) { return; }
+                _config.SetLive("zone.mode", JsonValue.Of(values[mode.SelectedIndex]));
+            };
             _zoneMenu.Add(mode);
             _refreshers.Add(() => mode.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("zone.mode", "radius"))));
 
@@ -510,6 +538,7 @@ namespace TonightsTheNight.Menu
             item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("player.stance", "mode")));
             item.ItemChanged += (sender, args) =>
             {
+                if (_refreshing) { return; }
                 _config.SetLive("player.stance", JsonValue.Of(values[item.SelectedIndex]));
                 _director.RefreshPlayerStance();
             };
@@ -522,19 +551,39 @@ namespace TonightsTheNight.Menu
         private void AddToggle(NativeMenu menu, string title, string path, bool fallback, string description)
         {
             var item = new NativeCheckboxItem(title, description, _config.GetBool(path, fallback));
-            item.CheckboxChanged += (sender, args) => _config.SetLive(path, JsonValue.Of(item.Checked));
+            item.CheckboxChanged += (sender, args) =>
+            {
+                if (_refreshing) { return; }
+                _config.SetLive(path, JsonValue.Of(item.Checked));
+            };
             menu.Add(item);
             _refreshers.Add(() => item.Checked = _config.GetBool(path, fallback));
         }
 
         private void AddPercentSlider(NativeMenu menu, string title, string path, float fallback, string description, float scale = 1f)
         {
-            int steps = 20;
-            float current = _config.GetFloat(path, fallback);
-            var item = new NativeSliderItem(title, description, steps, (int)Math.Round(current / scale * steps));
-            item.ValueChanged += (sender, args) => _config.SetLive(path, JsonValue.Of(item.Value / (double)steps * scale));
+            const int steps = 20;
+
+            var item = new NativeSliderItem(title, description, steps, StepFor(path, fallback, scale, steps));
+            item.ValueChanged += (sender, args) =>
+            {
+                if (_refreshing) { return; }
+                _config.SetLive(path, JsonValue.Of(item.Value / (double)steps * scale));
+            };
             menu.Add(item);
-            _refreshers.Add(() => item.Value = (int)Math.Round(_config.GetFloat(path, fallback) / scale * steps));
+            _refreshers.Add(() => item.Value = StepFor(path, fallback, scale, steps));
+        }
+
+        /// <summary>
+        /// Clamped, because LemonUI throws when a slider is set past its maximum and this runs
+        /// inside the menu constructor. A pedMultiplier of 4 - which the config comments actively
+        /// invite - produced step 27 of 20, an ArgumentOutOfRangeException, and a mod that failed
+        /// to start at all with no menu to fix it from.
+        /// </summary>
+        private int StepFor(string path, float fallback, float scale, int steps)
+        {
+            int step = (int)Math.Round(_config.GetFloat(path, fallback) / scale * steps);
+            return Math.Max(0, Math.Min(steps, step));
         }
 
         private void AddRangeSlider(NativeMenu menu, string title, string path, int fallback, int min, int max, int step, string description)
@@ -544,7 +593,11 @@ namespace TonightsTheNight.Menu
             int index = Math.Max(0, Math.Min(steps, (current - min) / step));
 
             var item = new NativeSliderItem(title, description, steps, index);
-            item.ValueChanged += (sender, args) => _config.SetLive(path, JsonValue.Of(min + item.Value * step));
+            item.ValueChanged += (sender, args) =>
+            {
+                if (_refreshing) { return; }
+                _config.SetLive(path, JsonValue.Of(min + item.Value * step));
+            };
             menu.Add(item);
             _refreshers.Add(() =>
                 item.Value = Math.Max(0, Math.Min(steps, (_config.GetInt(path, fallback) - min) / step)));
@@ -560,16 +613,24 @@ namespace TonightsTheNight.Menu
         {
             PopulateModes();
 
-            foreach (Action refresh in _refreshers)
+            _refreshing = true;
+            try
             {
-                try
+                foreach (Action refresh in _refreshers)
                 {
-                    refresh();
+                    try
+                    {
+                        refresh();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("Could not refresh a menu control", ex);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Log.Error("Could not refresh a menu control", ex);
-                }
+            }
+            finally
+            {
+                _refreshing = false;
             }
 
             RefreshStopItem();

@@ -19,13 +19,17 @@ namespace TonightsTheNight.Core
     {
         private readonly ConfigStore _config;
         private readonly Random _random;
-        private readonly List<int> _fires = new List<int>();
+        /// <summary>Fire handle to the game time it stops counting against the cap.</summary>
+        private readonly Dictionary<int, int> _fires = new Dictionary<int, int>();
 
         private bool _weatherApplied;
         private bool _timecycleApplied;
         private int _nextFireAt;
 
         public int ActiveFires { get { return _fires.Count; } }
+
+        /// <summary>Reused for the expiry sweep so it does not allocate every pass.</summary>
+        private readonly List<int> _expired = new List<int>();
 
         public Ambience(ConfigStore config, Random random)
         {
@@ -115,7 +119,10 @@ namespace TonightsTheNight.Core
                 int handle = Function.Call<int>(Hash.START_SCRIPT_FIRE, ground.X, ground.Y, ground.Z,
                     _config.GetInt("features.fires.size", 20), false);
 
-                if (handle != 0) { _fires.Add(handle); }
+                if (handle != 0)
+                {
+                    _fires[handle] = Game.GameTime + _config.GetInt("features.fires.lifetimeSeconds", 45) * 1000;
+                }
             }
             catch (Exception ex)
             {
@@ -123,20 +130,37 @@ namespace TonightsTheNight.Core
             }
         }
 
+        /// <summary>
+        /// Forgets fires that have burnt out.
+        ///
+        /// Script fires die on their own and there is no native to ask whether one is still
+        /// going, so each handle carries an expiry. Without it the list only ever grew and
+        /// features.fires.maxActive became a lifetime total: after the eighth fire, roughly
+        /// seventy seconds in, a riot never produced another one for the rest of the mode.
+        /// </summary>
         private void PruneFires()
         {
-            // Script fires burn out on their own; the handles are just our accounting.
-            if (_fires.Count > 40) { _fires.RemoveRange(0, _fires.Count - 40); }
+            if (_fires.Count == 0) { return; }
+
+            _expired.Clear();
+
+            foreach (var pair in _fires)
+            {
+                if (Game.GameTime >= pair.Value) { _expired.Add(pair.Key); }
+            }
+
+            foreach (int handle in _expired) { _fires.Remove(handle); }
         }
 
         public void Clear()
         {
-            foreach (int handle in _fires)
+            foreach (var pair in _fires)
             {
-                try { Function.Call(Hash.REMOVE_SCRIPT_FIRE, handle); }
+                try { Function.Call(Hash.REMOVE_SCRIPT_FIRE, pair.Key); }
                 catch (Exception) { }
             }
             _fires.Clear();
+            _expired.Clear();
 
             try
             {

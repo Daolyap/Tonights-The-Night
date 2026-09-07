@@ -1,5 +1,63 @@
 # Changelog
 
+## v0.6.1 — QA pass before release
+
+A full correctness review of the codebase turned up sixteen defects. All are fixed. Nothing here
+is a new feature; several of them would have broken a fresh install.
+
+### Would have broken a first install
+
+**A config value the docs invite you to set killed the mod outright.** The percentage sliders did
+not clamp their position, and LemonUI throws when a slider is set past its maximum — from inside
+the menu constructor. `density.pedMultiplier: 4.0` produced step 27 of 20, an exception, and
+"Tonight's The Night failed to start" with no menu to fix it from. Every hot reload threw too.
+
+**Joining a side left you in a deleted relationship group.** Setting `player.side` moved the
+player into a faction's group, and stopping the riot then deleted that group out from under
+them. Every vanilla system keyed off `PLAYER` died — the police stop responding entirely — and
+nothing put it back. This is the exact failure the code's own comments warn about.
+
+**The parser could hard-crash the game.** Deeply nested JSON recursed until the stack gave out,
+and a `StackOverflowException` cannot be caught in .NET: it takes the process, so GTA V would
+close with no message and nothing in the log. Mode files are shared between players, so that
+parser reads files written by strangers. Nesting is now capped at 64 levels — the deepest shipped
+mode reaches about six.
+
+### Fixed
+
+- **The menu never paused the riot.** LemonUI closes the parent when you open a submenu, so
+  tracking only the root meant the pause added in v0.5.0 was off for nearly all of the time the
+  menu was actually on screen. F6 also opened a second menu on top of the first.
+- **Reloading config froze your settings.** Refreshing a control re-entered its own change
+  handler and wrote the value into the live layer, which outranks `user.json` — so after one
+  reload those keys ignored the file for the rest of the session, and profiles saved settings you
+  had never touched.
+- **Fires stopped permanently after eight.** `maxActive` had become a lifetime total, so about
+  seventy seconds into any mode there were no new fires or burning cars again.
+- **`restoreWorldOnStop: false` leaked the entire registry.** The next mode found itself already
+  at the ped ceiling and never recruited anyone.
+- **Car thieves had their theft cancelled** six seconds in, and could be handed a second looting
+  job while still walking to the first car.
+- **Waves double-spawned** when a faction's vehicles were not installed, and the second vehicle
+  of a wave could be abandoned in the street with its engine and siren running, tracked by
+  nothing.
+- **A recycled entity handle could unindex a live ped**, getting it recruited twice — two blips,
+  conditioned and armed twice.
+- **A negative `reinforcements.perLoss`** could divide the wave timer by zero.
+- **The spawn ceiling was checked once per pass**, so every faction due at the same time could
+  each add a full wave over it.
+- **Blip counting walked the whole tracked list once per recruit** — about 1,400 iterations
+  twenty times a second.
+- **The perception scan re-walked the same peds** every check instead of advancing through the
+  crowd.
+- **Every log line opened and closed the file.** At the Debug level testers are asked to enable,
+  that is synchronous disk I/O several times a frame — so the one session anybody is asked to
+  capture was the one that stuttered, and the frame times in the log were polluted by the
+  logging. Lines are now buffered and flushed on an interval, immediately for warnings and
+  errors, and on shutdown.
+
+---
+
 ## v0.6.0 — they have to actually see you
 
 ### Added — perception

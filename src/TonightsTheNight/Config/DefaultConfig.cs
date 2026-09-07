@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.6.0";
+        public const string Version = "0.6.1";
 
         public static JsonValue Build()
         {
@@ -227,6 +227,10 @@ namespace TonightsTheNight.Config
             fires.Set("radius", JsonValue.Of(120));
             fires.Set("size", JsonValue.Of(20));
             fires.Set("burnVehicles", JsonValue.Of(true));
+            // How long a fire counts against maxActive. Script fires burn out on their own and
+            // there is no native to ask whether one still is, so this is an estimate of how long
+            // one lasts rather than a lifetime we enforce.
+            fires.Set("lifetimeSeconds", JsonValue.Of(45));
             features.Set("fires", fires);
 
             JsonValue purge = JsonValue.NewObject();

@@ -189,11 +189,13 @@ namespace TonightsTheNight.Core
             _pursuit.EndAll();
             _looting.EndAll();
 
-            if (_config.GetBool("riot.restoreWorldOnStop", true))
-            {
-                BeginPacifying(_registry.Tracked);
-                _registry.RestoreAll();
-            }
+            bool restore = _config.GetBool("riot.restoreWorldOnStop", true);
+            if (restore) { BeginPacifying(_registry.Tracked); }
+
+            // Always, whatever the setting: this is what ends the tracking, not just what
+            // undoes the conditioning.
+            _registry.ReleaseAll(restore);
+            RestorePlayerGroup();
 
             Ambience.Clear();
             Zone.Clear();
@@ -209,6 +211,32 @@ namespace TonightsTheNight.Core
             if (!quiet) { GTA.UI.Notification.Show("~g~Tonight's The Night~s~: stopped"); }
         }
 
+        /// <summary>
+        /// Puts the player back in the vanilla PLAYER group.
+        ///
+        /// Joining a side moves them into a faction's group, and Clear() then deletes that group
+        /// out from under them. The player was left assigned to a hash that no longer existed,
+        /// which kills every vanilla system keyed off PLAYER - the police stop responding
+        /// entirely - and nothing put it back until a later mode happened to start with
+        /// player.side neutral. Must run before the groups are removed.
+        /// </summary>
+        private void RestorePlayerGroup()
+        {
+            if (!_playerMovedGroup) { return; }
+
+            try
+            {
+                RelationshipMatrix.RestorePed(Game.Player.Character, RelationshipMatrix.VanillaPlayerGroup);
+                Log.Info("Player returned to the vanilla PLAYER relationship group.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not restore the player's relationship group", ex);
+            }
+
+            _playerMovedGroup = false;
+        }
+
         /// <summary>Called from the script's Aborted handler. Must not throw.</summary>
         public void EmergencyCleanup()
         {
@@ -217,6 +245,7 @@ namespace TonightsTheNight.Core
                 _pursuit.EndAll();
                 _looting.EndAll();
                 _registry.RestoreAll();
+                RestorePlayerGroup();
                 Ambience.Clear();
                 Zone.Clear();
                 _craft.Clear();
@@ -406,15 +435,18 @@ namespace TonightsTheNight.Core
         {
             if (!_config.GetBool("riot.spawnFactions", true)) { return; }
 
-            // Per-faction caps are not a global cap. With five spawning factions in Martial Law
-            // their ceilings add up to more than the engine budget, and nothing else was
-            // stopping them.
-            if (_registry.Count >= _config.GetInt("engine.maxTrackedPeds", 120)) { return; }
+            int ceiling = _config.GetInt("engine.maxTrackedPeds", 120);
+            if (_registry.Count >= ceiling) { return; }
 
             _spawner.NoteAliveCounts(_registry.Tracked);
 
             foreach (Faction faction in ActiveMode.Factions)
             {
+                // Re-checked per faction, not once per pass. Per-faction caps are not a global
+                // cap: with five spawning factions all due in the same pass, one check at the
+                // top let every one of them add a full wave over the ceiling.
+                if (_registry.Count >= ceiling) { break; }
+
                 if (!Escalation.Allows(faction.FromPhase)) { continue; }
                 if (!_spawner.WaveDue(faction)) { continue; }
 
@@ -806,7 +838,7 @@ namespace TonightsTheNight.Core
             if (entry.Reaction != Reaction.Fight) { return false; }
             // A chase or a looting run is a task of its own; re-issuing "fight whoever is
             // nearby" over the top of one is how a chase ends at the first junction.
-            if (entry.InPursuit || entry.Loot != null) { return false; }
+            if (entry.InPursuit || entry.Looting) { return false; }
             if (Game.GameTime - entry.LastTaskedAt < retaskAfterMs) { return false; }
 
             Ped ped = entry.Ped;
@@ -870,7 +902,10 @@ namespace TonightsTheNight.Core
         {
             if (!_config.GetBool("blips.enabled", true)) { return; }
             if (!entry.Faction.BlipEnabled) { return; }
-            if (CountBlips() >= _config.GetInt("blips.maxBlips", 40)) { return; }
+            // Counted rather than recounted: walking the whole tracked list once per recruit was
+            // ~1,400 iterations twenty times a second in a class whose rule is never to touch
+            // every ped every tick.
+            if (_registry.BlipCount >= _config.GetInt("blips.maxBlips", 40)) { return; }
 
             try
             {
@@ -881,6 +916,7 @@ namespace TonightsTheNight.Core
                 blip.Name = entry.Faction.DisplayName;
                 blip.IsShortRange = true;
                 entry.Blip = blip;
+                _registry.NoteBlipAdded();
             }
             catch (Exception ex)
             {
@@ -902,15 +938,6 @@ namespace TonightsTheNight.Core
             }
         }
 
-        private int CountBlips()
-        {
-            int count = 0;
-            foreach (TrackedPed entry in _registry.Tracked)
-            {
-                if (entry.Blip != null) { count++; }
-            }
-            return count;
-        }
 
         private void ApplyRelations(RiotMode mode)
         {
