@@ -11,7 +11,7 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.5.0";
+        public const string Version = "0.6.0";
 
         public static JsonValue Build()
         {
@@ -351,6 +351,31 @@ namespace TonightsTheNight.Config
             craft.Set("dropScatter", JsonValue.Of(20));
             craft.Set("blip", JsonValue.Of(true));
             features.Set("craft", craft);
+
+            // Whether the riot knows where you are.
+            //
+            // Off, hostility is a permanent property of a relationship group: every soldier in
+            // the district is your enemy from the moment the mode starts, through walls and
+            // around corners. On, being a target is a state you can get out of - break line of
+            // sight, stay quiet, and they go back to fighting the people they can see.
+            JsonValue perception = JsonValue.NewObject();
+            perception.Set("enabled", JsonValue.Of(true));
+            perception.Set("sightRange", JsonValue.Of(60));
+            // How long they keep looking after losing sight of you.
+            perception.Set("forgetSeconds", JsonValue.Of(12));
+            perception.Set("checkIntervalMs", JsonValue.Of(400));
+            // Line-of-sight traces are the expensive part, so only this many per check. The
+            // round-robin covers the whole crowd over a couple of seconds anyway.
+            perception.Set("samplesPerCheck", JsonValue.Of(6));
+            // Firing a weapon gives you away through walls, as it should.
+            perception.Set("gunfireGivesYouAway", JsonValue.Of(true));
+            // Crouching or taking cover multiplies their sight range by this.
+            perception.Set("stealthFactor", JsonValue.Of(0.45));
+            // On, a ped must be facing you to see you. Off by default: people have peripheral
+            // vision, and a hard cone reads as the AI being broken rather than as stealth.
+            perception.Set("requireFacing", JsonValue.Of(false));
+            perception.Set("notify", JsonValue.Of(true));
+            features.Set("perception", perception);
 
             JsonValue profiles = JsonValue.NewObject();
             profiles.Set("enabled", JsonValue.Of(true));

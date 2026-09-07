@@ -6,7 +6,7 @@ Nine riot modes built from **factions** — who they are, what they carry, who t
 they react when it starts. Modes and factions are JSON files, not code, so a custom faction needs
 no build step. Every optional feature is a switch with its own settings block.
 
-**Version 0.5.0.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
+**Version 0.6.0.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
 ScriptHookVDotNet 3 and [LemonUI](https://www.gta5-mods.com/tools/lemonui). **F6** opens the
 menu.
 
@@ -35,6 +35,10 @@ chase another rioter, come after you, or get out of your way. Four weights, all 
 **Escalation.** Riots build. Phases advance on elapsed time *or* body count, so a quiet riot
 still progresses and a bloodbath escalates immediately. Factions declare which phase they join
 at, which is what makes the army arrive late rather than at the first thrown punch.
+
+**They have to see you.** Hostility is a state, not a fact. Break line of sight, stay quiet, and
+the riot loses you and goes back to fighting itself. Firing a weapon gives you away through
+walls; crouching and cover shorten how far they can pick you out.
 
 **Reinforcements.** A faction that takes losses sends more, sooner. Meet the army with nothing
 and the response stays a patrol; destroy three carloads and the next ones come in force.

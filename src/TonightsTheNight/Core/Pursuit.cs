@@ -105,7 +105,12 @@ namespace TonightsTheNight.Core
             _chases.Clear();
         }
 
-        public void Update(IReadOnlyList<TrackedPed> tracked)
+        /// <summary>
+        /// <paramref name="playerVisible"/> gates new chases only. One already under way keeps
+        /// going on its own give-up rules — a carload behind you does not forget where you are
+        /// because you turned a corner.
+        /// </summary>
+        public void Update(IReadOnlyList<TrackedPed> tracked, bool playerVisible)
         {
             if (!Enabled)
             {
@@ -123,7 +128,7 @@ namespace TonightsTheNight.Core
                 if (!Advance(_chases[i])) { _chases.RemoveAt(i); }
             }
 
-            TryForm(tracked);
+            if (playerVisible) { TryForm(tracked); }
         }
 
         private void ExpireGrudges()
@@ -204,6 +209,7 @@ namespace TonightsTheNight.Core
             {
                 if (entry.InPursuit || entry.Loot != null || !entry.IsUsable) { continue; }
                 if (entry.Reaction != Reaction.Fight) { continue; }
+                if (!CanDrive(entry.Ped)) { continue; }
                 if (!_grudges.ContainsKey(entry.Faction.Id)) { continue; }
 
                 float distance = player.Position.DistanceToSquared(entry.Ped.Position);
@@ -214,6 +220,23 @@ namespace TonightsTheNight.Core
             }
 
             return lead;
+        }
+
+        /// <summary>
+        /// Animals cannot drive, and the boarding fallback would have warped one into the
+        /// driver's seat rather than admitting it. A coyote at the wheel of a saloon is funny
+        /// exactly once.
+        /// </summary>
+        private static bool CanDrive(Ped ped)
+        {
+            try
+            {
+                return Function.Call<bool>(Hash.IS_PED_HUMAN, ped);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private Chase Form(TrackedPed lead, IReadOnlyList<TrackedPed> tracked, Ped player)
@@ -327,6 +350,7 @@ namespace TonightsTheNight.Core
             {
                 if (entry.InPursuit || entry.Loot != null || !entry.IsUsable) { continue; }
                 if (entry.Reaction != Reaction.Fight) { continue; }
+                if (!CanDrive(entry.Ped)) { continue; }
                 if (entry.Faction != chase.Faction) { continue; }
 
                 float distance = origin.DistanceToSquared(entry.Ped.Position);

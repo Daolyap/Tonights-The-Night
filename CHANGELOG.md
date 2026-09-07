@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.6.0 — they have to actually see you
+
+### Added — perception
+
+Hostility used to be a permanent property of a relationship group. Every soldier in the district
+was your enemy from the moment the mode started — through walls, around corners, from behind.
+Standing in an alley two streets away did not help, because nobody ever needed to see you.
+
+Being a target is now a state you can get out of. Nearby hostiles are sampled for a clear line
+of sight; firing a weapon gives you away regardless of walls, as it should. Crouching or taking
+cover shortens how far they can pick you out. Break away for twelve seconds and every faction
+drops back to neutral — at which point their combat AI goes and finds somebody it *can* see,
+which in a riot is never in short supply.
+
+Neutral is not a truce. It is being unremarkable.
+
+Losing you also tells the peds who were already fighting you, because a combat task that has
+locked onto a target does not drop it just because a relationship changed underneath it. Only
+the ones actually targeting you are cleared — clearing every nearby fighter would stop every
+unrelated fight in the street at the same moment, which reads as the riot pausing rather than as
+losing you.
+
+Range, search time, stealth multiplier and whether a ped must be facing you are all settings.
+The three you are most likely to want are in the menu under **Tuning**. Turn the whole thing off
+there for the old behaviour.
+
+### Fixed — a coyote could be assigned to drive a car
+
+Nothing in the chase system checked whether the lead could drive. In Animal Uprising a provoked
+coyote would be picked as a driver, fail to walk to the car, and then be *warped into the
+driver's seat* by the boarding fallback.
+
+### Changed
+
+**No new chases start while they cannot find you.** One already under way keeps going on its own
+give-up rules — a carload behind you does not forget where you are because you turned a corner.
+
+---
+
 ## v0.5.0 — ships, jets, reinforcements, and a cheaper menu
 
 ### Fixed — the menu halving your frame rate

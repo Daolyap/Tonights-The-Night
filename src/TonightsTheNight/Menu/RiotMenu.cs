@@ -211,6 +211,16 @@ namespace TonightsTheNight.Menu
 
             AddStancePicker(_tuningMenu);
 
+            AddToggle(_tuningMenu, "They Have To See You", "features.perception.enabled", true,
+                "On: break line of sight and they lose you, then go back to fighting each other. "
+                + "Off: everyone hostile knows where you are at all times, through walls.");
+
+            AddRangeSlider(_tuningMenu, "How Far They See", "features.perception.sightRange", 60, 20, 150, 10,
+                "How far a rioter can pick you out. Crouching and cover shorten it.");
+
+            AddRangeSlider(_tuningMenu, "How Long They Search", "features.perception.forgetSeconds", 12, 3, 60, 3,
+                "Seconds they keep hunting after losing sight of you.");
+
             AddToggle(_tuningMenu, "Never Flee", "combat.neverFlee", true,
                 "Stops fighters breaking off and running. Turn off for a more realistic crowd.");
         }

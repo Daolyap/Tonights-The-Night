@@ -32,6 +32,7 @@ namespace TonightsTheNight.Core
         private readonly Looting _looting;
         private readonly Reinforcements _reinforcements;
         private readonly SkyCraft _craft;
+        private readonly Perception _perception;
 
         public Escalation Escalation { get; private set; }
         public RiotZone Zone { get; private set; }
@@ -42,6 +43,7 @@ namespace TonightsTheNight.Core
         public Looting Looting { get { return _looting; } }
         public Reinforcements Reinforcements { get { return _reinforcements; } }
         public SkyCraft Craft { get { return _craft; } }
+        public Perception Perception { get { return _perception; } }
 
         /// <summary>Recruits confirmed dead, as opposed to merely despawned. Drives escalation.</summary>
         public int Kills { get; private set; }
@@ -62,6 +64,13 @@ namespace TonightsTheNight.Core
         /// one, and sending a rioter to ram their own allies reads as broken.
         /// </summary>
         private readonly HashSet<string> _hostilePairs = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// The standing each faction takes towards the player once it can see them. Held rather
+        /// than written straight to the matrix, because hostility is now a state that comes and
+        /// goes with whether anybody has eyes on you.
+        /// </summary>
+        private readonly Dictionary<string, int> _hostileToPlayer = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Peds being calmed down after a stop, and the deadline for doing so.</summary>
         private readonly List<Ped> _pacifying = new List<Ped>();
@@ -104,6 +113,7 @@ namespace TonightsTheNight.Core
             _spawner = new Spawner(config, _models, _random, _reinforcements);
             _vehicles = new VehicleBehaviour(config);
             _craft = new SkyCraft(config, _models, _random);
+            _perception = new Perception(config, _random);
             _pursuit = new Pursuit(config, _random);
             _looting = new Looting(config, _models, _random);
 
@@ -133,6 +143,8 @@ namespace TonightsTheNight.Core
 
             ApplyRelations(mode);
             BuildHostility(mode);
+            // Before the standings, which depend on whether the riot can currently see you.
+            _perception.Reset();
             ApplyPlayerSide(mode);
 
             // Before the pool, because the pool asks the escalation which factions are allowed
@@ -263,9 +275,12 @@ namespace TonightsTheNight.Core
                 // entity moves a quarter-second, and a fleet that freezes mid-air is worse.
                 _craft.Update(ActiveMode.Craft, Zone.Centre, true);
 
+                _perception.Update(_registry.Tracked);
+                if (_perception.Changed) { OnPerceptionChanged(); }
+
                 if (!Paused)
                 {
-                    _pursuit.Update(_registry.Tracked);
+                    _pursuit.Update(_registry.Tracked, _perception.Spotted);
                     _looting.Update(_registry.Tracked, unphased || phase.Looting);
                 }
 
@@ -491,6 +506,7 @@ namespace TonightsTheNight.Core
                      ", culled " + CulledTotal + ", fires " + Ambience.ActiveFires +
                      ", chases " + _pursuit.ActiveChases + "/" + _pursuit.Started +
                      ", reinforcement " + ReinforcementSummary() +
+                     ", player " + (_perception.Spotted ? "spotted" : "unseen " + _perception.SecondsSinceSeen + "s") +
                      ", looting " + _looting.Active + "/" + _looting.Total +
                      ", phase " + Escalation.Current + " '" + Escalation.CurrentName + "'" +
                      ", tick " + LastTickMs.ToString("F2") + "ms, budget " + _budget);
@@ -961,19 +977,142 @@ namespace TonightsTheNight.Core
             // faction answer for itself and falls back to the mode's own setting.
             int forced = ParseStance(_config.GetString("player.stance", "mode"), -1);
 
+            _hostileToPlayer.Clear();
+
             foreach (Faction faction in mode.Factions)
             {
                 int stance = forced >= 0 ? forced
                     : (faction.PlayerRelationship >= 0 ? faction.PlayerRelationship : mode.PlayerRelationship);
 
-                _relationships.Set(faction.GroupHash, _relationships.PlayerGroup, stance);
+                _hostileToPlayer[faction.Id] = stance;
                 _relationships.Set(_relationships.PlayerGroup, faction.GroupHash, RelationshipMatrix.Neutral);
 
-                Log.Debug("Faction '" + faction.Id + "' regards the player as " + stance + " (0 companion .. 5 hate).");
+                Log.Debug("Faction '" + faction.Id + "' regards the player as " + stance +
+                          " (0 companion .. 5 hate) once they can see them.");
             }
+
+            // Only the factions that would actually come for you are worth spending a
+            // line-of-sight trace on.
+            var hostileIds = new List<string>();
+            foreach (var pair in _hostileToPlayer)
+            {
+                if (pair.Value >= RelationshipMatrix.Dislike) { hostileIds.Add(pair.Key); }
+            }
+            _perception.SetHostileFactions(hostileIds);
+
+            ApplyVisibility(mode);
 
             Log.Info("Player stance: " + (forced >= 0 ? forced.ToString() : "per faction") +
                      ", vanilla PLAYER group kept.");
+        }
+
+        /// <summary>
+        /// Writes each faction's standing towards the player, which is their declared stance
+        /// while they can see the player and neutral while they cannot.
+        ///
+        /// Neutral is not a truce. Their combat AI keeps working; it simply has nothing to say
+        /// about someone it cannot find, and goes back to the targets it can see.
+        /// </summary>
+        private void ApplyVisibility(RiotMode mode)
+        {
+            bool spotted = _perception.Spotted;
+
+            foreach (Faction faction in mode.Factions)
+            {
+                int hostile;
+                if (!_hostileToPlayer.TryGetValue(faction.Id, out hostile)) { continue; }
+
+                _relationships.Set(faction.GroupHash, _relationships.PlayerGroup,
+                    spotted ? hostile : RelationshipMatrix.Neutral);
+            }
+        }
+
+        /// <summary>
+        /// Re-applies standing when the riot finds or loses the player.
+        ///
+        /// Losing you also needs the peds already fighting you to be told: a combat task that has
+        /// locked onto a target does not drop it because a relationship changed underneath it, so
+        /// nearby fighters are cleared and re-tasked, at which point they pick somebody they can
+        /// actually see.
+        /// </summary>
+        private void OnPerceptionChanged()
+        {
+            if (ActiveMode == null) { return; }
+
+            // Having joined a side, the player is in a faction's own group and standings are
+            // group to group. Being seen or not does not enter into it.
+            if (_playerMovedGroup) { return; }
+
+            ApplyVisibility(ActiveMode);
+
+            if (_perception.Spotted)
+            {
+                if (_config.GetBool("features.perception.notify", true))
+                {
+                    GTA.UI.Notification.Show("~r~Spotted.~s~ " + _perception.Reason + ".");
+                }
+                return;
+            }
+
+            ReleaseFromPlayer();
+
+            if (_config.GetBool("features.perception.notify", true))
+            {
+                GTA.UI.Notification.Show("~g~They have lost you.");
+            }
+        }
+
+        /// <summary>
+        /// Breaks off everyone currently fighting the player, so they re-acquire. Bounded to the
+        /// peds near enough to have been fighting you in the first place.
+        /// </summary>
+        private void ReleaseFromPlayer()
+        {
+            Ped player = Game.Player.Character;
+            float radius = _config.GetFloat("features.perception.sightRange", 60f) * 1.5f;
+            float radiusSquared = radius * radius;
+            int released = 0;
+
+            foreach (TrackedPed entry in _registry.Tracked)
+            {
+                if (!entry.IsUsable || entry.InPursuit) { continue; }
+                if (entry.Reaction != Reaction.Fight) { continue; }
+                if (player.Position.DistanceToSquared(entry.Ped.Position) > radiusSquared) { continue; }
+
+                // Only the ones actually fighting the player. Clearing every nearby fighter
+                // would stop every unrelated fight in the street at the same moment, which
+                // reads as the riot pausing rather than as losing them.
+                if (!IsFightingPlayer(entry.Ped, player)) { continue; }
+
+                try
+                {
+                    Function.Call(Hash.CLEAR_PED_TASKS, entry.Ped);
+                    // Due for a fresh target on the Director's next pass over it.
+                    entry.LastTaskedAt = 0;
+                    released++;
+                }
+                catch (Exception)
+                {
+                    // A ped that vanished mid-pass is not worth reporting.
+                }
+            }
+
+            Log.Debug("Perception: released " + released + " ped(s) from the player.");
+        }
+
+        private static bool IsFightingPlayer(Ped ped, Ped player)
+        {
+            try
+            {
+                if (!ped.IsInCombat) { return false; }
+
+                int target = Function.Call<int>(Hash.GET_PED_TARGET_FROM_COMBAT_PED, ped, 0);
+                return target == player.Handle;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         /// <summary>
