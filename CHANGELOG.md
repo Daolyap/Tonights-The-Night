@@ -1,5 +1,223 @@
 # Changelog
 
+## v1.0.0 — the release
+
+Twelve modes, two of which are not riots at all, and a pass over every complaint from the first
+public build. The version number is the point: this is the one meant to be installed by people
+who did not write it.
+
+### Fixed — the menu header
+
+Two things were wrong and both were in every screenshot anyone took.
+
+The banner was a `ScaledRectangle` created with an empty size. A rectangle has no texture behind
+it, so until LemonUI's recalculate landed the header was the game showing through — a title
+floating over traffic. It is a tinted base-game texture now, which is what every other menu in
+the game uses and cannot end up transparent.
+
+The title was set in **HouseScript**, the handwritten Los Santos font, whose glyphs are far taller
+than the Chalet faces LemonUI sizes its header against. At the default banner scale it overhung
+the subtitle bar and the first two items — that is the text lying across "Riot Modes". Font,
+scale and colour are settings now, the scale is clamped in code, and the default fits.
+
+### Fixed — every armoured column was four Rhinos, and every marine wore a white t-shirt
+
+One bug, in one line, and the cause of two separate complaints.
+
+The spawner resolved a faction's models and vehicles with a **first-match** lookup — "the best of
+these" — when every spawn profile in the mod is a **set to draw from**. So a faction declaring
+four vehicles always got whichever was written first. Martial Law's armoured column listed
+`rhino` first, so every armoured wave was two tanks. The coastal patrol listed `s_m_y_marine_03`
+first, which is the marine model in a white t-shirt, so the navy was a boatload of men in vests.
+
+Spawn profiles now draw at random from the models the install actually has, **per ped** rather
+than per wave — so a squad of six is six people instead of one person six times.
+
+On top of that: `s_m_y_marine_03` is gone from the shipped military factions, and the tank is its
+own faction with a cap of two and ninety seconds between waves. A tank should be an event.
+
+### Fixed — the RPG ratio
+
+A loadout weight is a *share of a faction*, not a rarity, and the two are very easy to confuse
+when writing one. `{"RPG": 1}` against `{"CombatMG": 3}` reads as a garnish and arms a quarter of
+the column with rocket launchers, which by the final phase of Martial Law is a street nothing
+survives without invincibility.
+
+The shipped loadout is rebalanced, and there is now a global **Heavy Weapons** share that thins
+rockets, launchers, miniguns and machine guns across *every* mode including ones nobody here
+wrote. 100% honours each loadout exactly as written.
+
+### Fixed — everybody trying to kill you at once
+
+Hostility is a property of a relationship group and a group has no size. The moment the army
+could see you, every soldier in the district was individually in a combat task against you.
+
+Engagement is budgeted now: a handful come for you and the rest carry on fighting the people they
+were already fighting, rotating back round later. It is a rotation, not an amnesty — you are
+still hated, and the slider goes to sixteen if a firing squad was what you wanted.
+
+### Fixed — being run over during a riot
+
+Three causes, all fixed.
+
+A vehicle chase task against a target **on foot** is resolved by driving over them, so a driver
+who decided to come after you was aimed at your back by design. Drivers who are after you now
+*follow* from a standoff distance and their passengers lean out, which is a chase rather than a
+collision. `vehicles.ram` still does the old thing if being driven into is the point.
+
+"Stop steering around people" is what makes a driver plough through a crowd. Applied to the one
+driver whose target is a person, it stops being atmosphere. It is no longer applied to a driver
+who is after you — nor to a police or military driver, whose default mission against the player
+is now follow rather than attack.
+
+And the weights each driver rolls said nothing about how many drivers had *already* rolled, so
+every car on the street deciding independently converged on you from four directions. There is a
+ceiling now, and it defaults to one.
+
+### Fixed — nothing spawned in quieter areas
+
+`GET_SAFE_COORD_FOR_PED` answers a narrower question than it looks like it does: it wants a point
+on the pedestrian navmesh, which downtown is everywhere and in the desert, the hills and half of
+Blaine County is nowhere. Every caller treating a zero return as "nothing arrives" therefore
+worked perfectly in the city and silently produced nothing at all out of it.
+
+The navmesh is a preference now rather than a requirement: failing it, the ground itself will do.
+An alien walking out of scrub is fine; no alien is not.
+
+### Fixed — the invasion
+
+Twenty-four scouts arriving five at a time every nine seconds, plus fourteen hunters, plus
+reinforcements on top, was not an invasion — it was a wall, and it reached sixty. Halved,
+slowed, and their accuracy, health and armour brought down with it. The drop ring around a ship
+is wider too, because a tight ring has nowhere to put anybody when the ship is over a hillside.
+
+There is also a single **Intensity** slider that scales every spawning faction's wave size,
+ceiling and arrival rate at once — the answer to any mode being too much or not enough, without
+editing nine files.
+
+### Fixed — the ships flying through each other, and stepping across the sky
+
+Every craft shared a radius, a height and an angular speed and was given a random starting angle,
+so two that happened to start close together stayed inside each other for the whole invasion.
+Each one now owns a share of the orbit, a lane and an altitude band, with a separation pass
+behind it as the guarantee rather than the plan.
+
+They were also moved four times a second by a fixed step inside a throttled update, which is
+exactly as choppy as it sounds. Movement is time-based and runs every frame now; the streaming
+and blip work stays throttled.
+
+### Fixed — the purge that never ended
+
+It did end. It ended on a single frame: the timer hit zero, the mode stopped, and everything that
+had been happening simply was not any more. Whether that read as an ending or as nothing at all
+depended entirely on what you were looking at.
+
+There is a shape to it now — a countdown on screen, a warning with a minute to go, then the siren,
+and a wind-down in which nothing new arrives and everyone still fighting is talked down before
+the mode lets go.
+
+### Fixed — the looting props
+
+Ten prop names shared one hand-tuned offset and rotation. Those numbers were right for one prop
+and wrong for the other nine, which is why a looter could sprint down Vespucci Boulevard with a
+flat-screen television balanced on a fingertip at forty-five degrees.
+
+Size decides the pose now: small things hang off the prop bone in one hand, big things get both
+arms and the box-carry animation — an upper-body secondary, so they can still run with it. Every
+offset is config, and **Small Items Only** is there for anyone who would rather nobody carried a
+television at all.
+
+### Added — Tonight's The Night
+
+The mode the mod is named after.
+
+One thing on the map is coming for you specifically. It crosses ground, air and water, because
+there is no version of this that is any good if the answer is a helicopter. It kills whatever it
+passes on the way.
+
+The design problem with an unkillable pursuer is that "unkillable" and "beatable" have to both be
+true or it is not a fight — it is either a cutscene or a chore. So its real health is pinned and
+meaningless, and everything that hits it goes into a separate **Resolve** pool at a fraction of
+its value, in whole while it is staggered. Staggering it is a consequence of what *it* does
+rather than something you can force: survive the ability, punish the recovery.
+
+Two rules keep that honest. Sustained damage fills a Break meter that opens it up on its own, so
+a player with good aim and no explosives still has a route in. And a single large hit always
+lands for more than its share, so the rocket launcher in your boot, the car you are driving, and
+whatever a physics mod does to it all count.
+
+Three phases, each one worse, each transition a long and obvious opening — the reward for getting
+it that far. Everything is in `features.hunter` and on its own menu page.
+
+### Added — Car Chase
+
+Somebody put a price on you and it goes up. Nothing in this mode is fighting anything except you,
+and it does not stop until you do.
+
+Five waves of escalation, counted from your own body count rather than a timer — so it advances
+because you are winning, not because time passed. Chancers in ordinary cars, then crews, then
+professionals in armoured saloons, then contractors in Insurgents, and finally the helicopters,
+at which point it stops being a car chase. The wave and how many are currently after you are on
+screen.
+
+### Added — Patient Zero
+
+The custom mode, and the only one built on a mechanic the others do not have.
+
+Every other mode is fed by converting the crowd near you and by spawning, both capped, so a riot
+rises to a level and stays there. This one **spreads**: infected convert the uninfected by
+reaching them. It grows where its members physically are, so it moves outward, thins where it is
+being killed, and gets worse the longer it is left. It is the only thing here that can be
+contained by killing the right people rather than by a setting.
+
+A military cordon arrives in the last phase and is not there to help anybody, including you.
+
+### Added — a melee-only weapon preset
+
+Not a novelty. With nothing that shoots, a riot stops killing its own participants faster than
+the game can stream replacements, so it is by some distance the longest-lived and densest thing
+this mod can produce — and the only preset in which a crowd is both genuinely dangerous to walk
+into and genuinely survivable to fight.
+
+### Added — custom loadouts, built in the game
+
+Custom loadouts used to be a menu item explaining how to write a JSON array into `user.json`.
+That is a fine thing to offer somebody already editing config and a useless thing to offer
+anybody on a controller.
+
+The base-game weapons are now browsable by category, with a weight per entry, ammunition, body
+armour and armed chance. It is the same setting underneath — `weapons.custom` in the live config
+layer — so a loadout built in the menu can still be saved to a profile slot, read back from a
+file, or hand-written by anyone who prefers to.
+
+### Added — the blackout is configurable
+
+The single largest change this mod can make to how a street looks was reachable only by playing
+three quarters of a mode that happens to declare it. **When** is a setting now — never, when the
+mode asks, or from the moment it starts — along with whether it reaches headlights, and a flicker:
+long stretches of dark with the grid coming back for half a second, which is most of the
+difference between "the lights are off" and "something is wrong with the city".
+
+### Added — dying ends the riot
+
+A riot is something that happened to you, and dying is the end of your part in it. Left running,
+you respawn at a hospital into a city that is still on fire with soldiers still looking for you —
+a legitimate thing to want and a terrible default. Switchable, in Features.
+
+### Changed — chases stop drifting off
+
+A vehicle mission expires, and a driver whose passengers are shooting reads as "in combat" for
+the whole chase — so the rule that leaves busy peds alone meant a car given one mission never got
+another. It drifted to the end of it and parked, which is most of why a chase used to end at
+nothing in particular. Drivers get a longer retask interval instead of an exemption.
+
+### Changed — Police State and the crowd
+
+Twenty-six officers converging on one person is not a police state either. Patrol and NOOSE
+numbers are down and their waves further apart.
+
+---
+
 ## v0.9.0 — the city, not just the crowd
 
 Everything until now arranged pedestrians. That is the part GTA is good at, and it is also the

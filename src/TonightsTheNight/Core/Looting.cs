@@ -33,34 +33,18 @@ namespace TonightsTheNight.Core
     /// </summary>
     public sealed class Looting
     {
-        /// <summary>PH_R_Hand. The bone everything carryable hangs off.</summary>
-        private const int RightHandBone = 57005;
-
-        /// <summary>
-        /// Vanilla only, and deliberately a mixed bag. Anything missing is skipped with one log
-        /// line, so this list can afford to be optimistic.
-        /// </summary>
-        private static readonly string[] LootProps =
-        {
-            "prop_tv_flat_01",
-            "prop_cs_box_clothes",
-            "prop_ld_case_01",
-            "prop_cash_case_01",
-            "prop_paper_bag_01",
-            "prop_big_bag_01",
-            "prop_boxpile_07d",
-            "prop_cs_cardbox_01",
-            "prop_binbag_01",
-            "prop_cs_shopping_bag"
-        };
-
         private readonly ConfigStore _config;
-        private readonly ModelResolver _models;
         private readonly Random _random;
         private readonly EntityRegistry _registry;
 
+        /// <summary>
+        /// What they carry and how they hold it. A separate class because "which props" and
+        /// "how does one sit in a hand" turned out to be the whole difference between looting
+        /// that reads and looting that is funny for the wrong reason.
+        /// </summary>
+        private readonly CarryProps _carry;
+
         private readonly List<LootJob> _jobs = new List<LootJob>();
-        private List<Model> _props;
         private int _nextJobAt;
         private int _nextPassAt;
 
@@ -70,15 +54,15 @@ namespace TonightsTheNight.Core
         public Looting(ConfigStore config, ModelResolver models, Random random, EntityRegistry registry)
         {
             _config = config;
-            _models = models;
             _random = random;
             _registry = registry;
+            _carry = new CarryProps(config, models, random);
         }
 
         public void Reset()
         {
             EndAll();
-            _props = null;
+            _carry.Reset();
             Total = 0;
             _nextJobAt = 0;
             _nextPassAt = 0;
@@ -193,19 +177,13 @@ namespace TonightsTheNight.Core
             {
                 // Never over the top of one already in hand: the old prop would be orphaned, and
                 // a persistent orphan is one the engine can no longer take back.
-                if (job.Entry.Loot == null) { prop = CreateLoot(ped); }
+                if (job.Entry.Loot == null) { prop = _carry.GiveTo(ped); }
 
-                if (prop != null)
-                {
-                    job.Entry.Loot = prop;
-                    Function.Call(Hash.ATTACH_ENTITY_TO_ENTITY, prop, ped,
-                        Function.Call<int>(Hash.GET_PED_BONE_INDEX, ped, RightHandBone),
-                        0.12f, 0.02f, 0f, 20f, 160f, 0f,
-                        true, true, false, true, 1, true);
-                }
+                if (prop != null) { job.Entry.Loot = prop; }
 
-                // Somewhere on the navmesh, far enough that they visibly leave with it.
-                Vector3 away = World.GetSafeCoordForPed(ped.Position.Around(
+                // Somewhere to be, far enough that they visibly leave with it. The bare ground
+                // will do where the navmesh will not - out of town it usually will not.
+                Vector3 away = Ground.Place(ped.Position.Around(
                     _config.GetFloat("features.looting.runDistance", 70f)));
 
                 Function.Call(Hash.SET_PED_KEEP_TASK, ped, true);
@@ -219,6 +197,10 @@ namespace TonightsTheNight.Core
                 {
                     Function.Call(Hash.TASK_WANDER_STANDARD, ped, 10f, 10);
                 }
+
+                // After the movement task, not before: the carry animation is an upper-body
+                // secondary, so it layers over the walk. Issued first, the walk replaces it.
+                _carry.PlayCarryAnimation(ped, job.Entry.Loot);
 
                 return true;
             }
@@ -331,6 +313,9 @@ namespace TonightsTheNight.Core
                     // Detach first, or a deleted attachment can take the ped's arm with it.
                     Function.Call(Hash.DETACH_ENTITY, entry.Loot, true, true);
                     entry.Loot.Delete();
+
+                    // Still holding an invisible television otherwise.
+                    if (entry.IsUsable) { _carry.StopCarryAnimation(entry.Ped); }
                 }
             }
             catch (Exception ex)
@@ -355,29 +340,5 @@ namespace TonightsTheNight.Core
             }
         }
 
-        private Prop CreateLoot(Ped ped)
-        {
-            if (!_config.GetBool("features.looting.carryProps", true)) { return null; }
-
-            if (_props == null)
-            {
-                _props = _models.ResolveAll(LootProps);
-                Log.Info("Looting: " + _props.Count + " of " + LootProps.Length + " loot props available.");
-            }
-
-            if (_props.Count == 0) { return null; }
-
-            Model model = _props[_random.Next(_props.Count)];
-            if (!_models.Load(model)) { return null; }
-
-            Prop prop = World.CreateProp(model, ped.Position, false, false);
-            if (prop == null || !prop.Exists()) { return null; }
-
-            // Ours: it is attached to a ped's hand and deleted explicitly when the job ends.
-            // Left reclaimable it could vanish out of their grip.
-            prop.IsPersistent = true;
-            Function.Call(Hash.SET_ENTITY_COLLISION, prop, false, false);
-            return prop;
-        }
     }
 }

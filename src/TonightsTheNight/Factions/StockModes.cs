@@ -20,12 +20,15 @@ namespace TonightsTheNight.Factions
             return new Dictionary<string, string>
             {
                 { "pedestrians", Pedestrians },
+                { "night", Night },
                 { "chaos", Chaos },
+                { "chase", Chase },
                 { "criminals", Criminals },
                 { "police", Police },
                 { "military", Military },
                 { "animals", Animals },
                 { "aliens", Aliens },
+                { "contagion", Contagion },
                 { "purge", Purge },
                 { "everything", Everything }
             };
@@ -255,9 +258,10 @@ namespace TonightsTheNight.Factions
       ""spawn"": {
         ""models"": [ ""s_m_y_cop_01"", ""s_f_y_cop_01"", ""s_m_y_hwaycop_01"" ],
         ""vehicles"": [ ""police"", ""police2"", ""police3"", ""sheriff"" ],
-        // Two cars of four every eight seconds, up to twenty-six on the street. A couple of
-        // officers trickling in does not read as a police state.
-        ""maxAlive"": 26, ""perWave"": 4, ""waveIntervalMs"": 8000,
+        // Two cars of four every eleven seconds, up to eighteen on the street. A couple of
+        // officers trickling in does not read as a police state; twenty-six all pointed at one
+        // person is not one either.
+        ""maxAlive"": 18, ""perWave"": 4, ""waveIntervalMs"": 11000,
         ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 2,
         ""siren"": true, ""driveThroughCrowds"": true
       },
@@ -276,8 +280,8 @@ namespace TonightsTheNight.Factions
         ""models"": [ ""s_m_y_swat_01"", ""s_m_y_blackops_01"" ],
         // A riot van arrives with a van's worth of people in it.
         ""vehicles"": [ ""riot"", ""fbi2"", ""police4"" ],
-        ""maxAlive"": 20, ""perWave"": 6, ""waveIntervalMs"": 13000,
-        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 6, ""vehiclesPerWave"": 2,
+        ""maxAlive"": 12, ""perWave"": 6, ""waveIntervalMs"": 18000,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 6, ""vehiclesPerWave"": 1,
         ""siren"": true, ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""BlueDark"" }
@@ -374,10 +378,13 @@ namespace TonightsTheNight.Factions
         { ""name"": ""CombatMG"", ""weight"": 1 }, { ""name"": ""SmokeGrenade"", ""weight"": 1 }
       ],
       ""spawn"": {
-        ""models"": [ ""s_m_y_marine_01"", ""s_m_y_marine_02"", ""s_m_y_marine_03"", ""s_m_m_marine_01"" ],
-        // A troop carrier arrives carrying troops. Two of them, six each, every nine seconds.
+        // s_m_y_marine_03 is deliberately absent. It is the marine in a white t-shirt, and
+        // because the spawner used to take the first name it could resolve rather than a
+        // random one, a list containing it produced an entire army of men in white t-shirts.
+        ""models"": [ ""s_m_y_marine_01"", ""s_m_y_marine_02"", ""s_m_m_marine_01"", ""s_m_m_marine_02"" ],
+        // A troop carrier arrives carrying troops. Two of them, six each, every ten seconds.
         ""vehicles"": [ ""barracks"", ""barracks2"", ""crusader"" ],
-        ""maxAlive"": 32, ""perWave"": 6, ""waveIntervalMs"": 9000,
+        ""maxAlive"": 28, ""perWave"": 6, ""waveIntervalMs"": 10000,
         ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 6, ""vehiclesPerWave"": 2,
         ""driveThroughCrowds"": true
       },
@@ -387,13 +394,40 @@ namespace TonightsTheNight.Factions
     ""armour"": {
       ""name"": ""Armoured Column"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 1,
       ""playerRelationship"": ""hate"",
-      ""armedChance"": 1.0, ""ammo"": 500, ""armour"": 100, ""accuracy"": 60, ""health"": 300,
-      ""weapons"": [ { ""name"": ""CombatMG"", ""weight"": 3 }, { ""name"": ""RPG"", ""weight"": 1 } ],
+      ""armedChance"": 1.0, ""ammo"": 500, ""armour"": 100, ""accuracy"": 50, ""health"": 250,
+      // A weight is a share of the faction, not a rarity. RPG at 1 against 3 armed a quarter of
+      // the column with rocket launchers, which by the final phase is a street nothing survives.
+      // It is rare here and the global combat.heavyWeaponChance thins it again on top.
+      ""weapons"": [
+        { ""name"": ""CarbineRifle"", ""weight"": 5 }, { ""name"": ""CombatMG"", ""weight"": 2 },
+        { ""name"": ""RPG"", ""weight"": 0.5 }
+      ],
       ""spawn"": {
         ""models"": [ ""s_m_y_marine_02"", ""s_m_y_blackops_01"", ""s_m_m_armoured_01"" ],
-        ""vehicles"": [ ""rhino"", ""insurgent"", ""insurgent2"", ""barracks2"" ],
-        ""maxAlive"": 14, ""perWave"": 4, ""waveIntervalMs"": 16000,
-        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 2,
+        // No rhino. Armour arriving is a column of troop carriers and technicals; a tank is a
+        // separate faction below with a cap of two, because a tank should be an event.
+        ""vehicles"": [ ""insurgent"", ""insurgent2"", ""barracks2"", ""crusader"" ],
+        ""maxAlive"": 12, ""perWave"": 4, ""waveIntervalMs"": 20000,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 1,
+        ""driveThroughCrowds"": true
+      },
+      ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""GreenDark"" }
+    },
+
+    // Two of them, ninety seconds apart, from the last phase only. Every previous version of
+    // this mode put the rhino in the armoured column's vehicle list, and since the spawner took
+    // the first name it could resolve, every armoured wave was two tanks - which is why the
+    // final phase was survivable only with invincibility on.
+    ""tanks"": {
+      ""name"": ""Armour"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 2,
+      ""playerRelationship"": ""hate"",
+      ""armedChance"": 1.0, ""ammo"": 300, ""armour"": 100, ""accuracy"": 45, ""health"": 200,
+      ""weapons"": [ { ""name"": ""CarbineRifle"", ""weight"": 1 } ],
+      ""spawn"": {
+        ""models"": [ ""s_m_y_marine_02"", ""s_m_m_armoured_01"" ],
+        ""vehicles"": [ ""rhino"" ],
+        ""maxAlive"": 2, ""perWave"": 2, ""waveIntervalMs"": 90000,
+        ""minDistance"": 180, ""maxDistance"": 300, ""inVehicleChance"": 1, ""occupants"": 2, ""vehiclesPerWave"": 1,
         ""driveThroughCrowds"": true
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""GreenDark"" }
@@ -439,7 +473,7 @@ namespace TonightsTheNight.Factions
       ""armedChance"": 1.0, ""ammo"": 400, ""armour"": 100, ""accuracy"": 45, ""health"": 200,
       ""weapons"": [ { ""name"": ""CarbineRifle"", ""weight"": 3 }, { ""name"": ""CombatMG"", ""weight"": 1 } ],
       ""spawn"": {
-        ""models"": [ ""s_m_y_marine_03"", ""s_m_y_marine_01"" ],
+        ""models"": [ ""s_m_y_marine_01"", ""s_m_y_marine_02"", ""s_m_m_marine_02"" ],
         ""vehicles"": [ ""predator"", ""dinghy"", ""dinghy2"" ],
         ""vehicleType"": ""water"",
         ""maxAlive"": 6, ""perWave"": 3, ""waveIntervalMs"": 40000,
@@ -480,7 +514,10 @@ namespace TonightsTheNight.Factions
     { ""from"": ""armour"",     ""to"": ""airsupport"", ""value"": ""companion"", ""mutual"": true },
     { ""from"": ""infantry"",   ""to"": ""navy"",       ""value"": ""companion"", ""mutual"": true },
     { ""from"": ""jets"",       ""to"": ""civilians"",  ""value"": ""hate"", ""mutual"": true },
-    { ""from"": ""jets"",       ""to"": ""airsupport"", ""value"": ""companion"", ""mutual"": true }
+    { ""from"": ""jets"",       ""to"": ""airsupport"", ""value"": ""companion"", ""mutual"": true },
+    { ""from"": ""tanks"",      ""to"": ""civilians"",  ""value"": ""hate"", ""mutual"": true },
+    { ""from"": ""tanks"",      ""to"": ""infantry"",   ""value"": ""companion"", ""mutual"": true },
+    { ""from"": ""tanks"",      ""to"": ""armour"",     ""value"": ""companion"", ""mutual"": true }
   ],
 
   ""config"": {
@@ -583,29 +620,35 @@ namespace TonightsTheNight.Factions
   ""factions"": {
     ""scouts"": {
       ""name"": ""Scouts"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1,
-      ""playerRelationship"": ""hate"", ""arrivesByCraft"": true, ""armedChance"": 1.0, ""ammo"": 500, ""armour"": 60, ""accuracy"": 45, ""health"": 200,
+      ""playerRelationship"": ""hate"", ""arrivesByCraft"": true, ""armedChance"": 1.0, ""ammo"": 500, ""armour"": 30, ""accuracy"": 30, ""health"": 150,
       ""weapons"": [
-        { ""name"": ""WEAPON_RAYPISTOL"", ""weight"": 4 },
-        { ""name"": ""UnholyHellbringer"", ""weight"": 2 }
+        { ""name"": ""WEAPON_RAYPISTOL"", ""weight"": 5 },
+        { ""name"": ""UnholyHellbringer"", ""weight"": 1 }
       ],
       ""spawn"": {
         ""models"": [ ""s_m_m_movalien_01"" ],
-        ""maxAlive"": 24, ""perWave"": 5, ""waveIntervalMs"": 9000, ""minDistance"": 15, ""maxDistance"": 45
+        // Fourteen, three at a time. Twenty-four arriving five at a time every nine seconds was
+        // not an invasion, it was a wall - and with reinforcements on top it reached sixty.
+        ""maxAlive"": 14, ""perWave"": 3, ""waveIntervalMs"": 12000,
+        // Wider than it was. They walk out from under a ship, and a ring this tight around the
+        // drop point has nowhere to put anybody when the ship is over a hillside.
+        ""minDistance"": 20, ""maxDistance"": 60
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Green"" }
     },
 
     ""hunters"": {
       ""name"": ""Hunters"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 1,
-      ""playerRelationship"": ""hate"", ""arrivesByCraft"": true, ""armedChance"": 1.0, ""ammo"": 800, ""armour"": 100, ""accuracy"": 60, ""health"": 350,
+      ""playerRelationship"": ""hate"", ""arrivesByCraft"": true, ""armedChance"": 1.0, ""ammo"": 800, ""armour"": 100, ""accuracy"": 40, ""health"": 250,
       ""weapons"": [
-        { ""name"": ""Widowmaker"", ""weight"": 3 },
+        { ""name"": ""WEAPON_RAYPISTOL"", ""weight"": 3 },
+        { ""name"": ""Widowmaker"", ""weight"": 2 },
         { ""name"": ""UnholyHellbringer"", ""weight"": 2 },
-        { ""name"": ""Railgun"", ""weight"": 1 }
+        { ""name"": ""Railgun"", ""weight"": 0.5 }
       ],
       ""spawn"": {
         ""models"": [ ""s_m_m_movalien_01"" ],
-        ""maxAlive"": 14, ""perWave"": 4, ""waveIntervalMs"": 14000, ""minDistance"": 15, ""maxDistance"": 45
+        ""maxAlive"": 6, ""perWave"": 2, ""waveIntervalMs"": 22000, ""minDistance"": 20, ""maxDistance"": 60
       },
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""GreenDark"" }
     },
@@ -810,6 +853,326 @@ namespace TonightsTheNight.Factions
     ""riot"": { ""conversionChance"": 0.85 },
     ""blips"": { ""enabled"": true },
     ""combat"": { ""accuracy"": 25 }
+  }
+}
+";
+
+
+        private const string Night = @"{
+  ""_stock"": true,
+  ""name"": ""Tonight's The Night"",
+  ""order"": 15,
+  ""description"": ""One thing on the map is coming for you. It is faster than you, it does not stop, and there is nowhere it cannot follow."",
+  ""enabled"": true,
+
+  // Not the crowd's problem and not the police's. This mode is one fight, and everything else
+  // in the street is scenery for it - or a body.
+  ""playerRelationship"": ""neutral"",
+
+  // The whole mode. Its real health is pinned and meaningless: damage goes into a Resolve pool
+  // at a fraction of its value, in whole while it is staggered, and staggering it is a
+  // consequence of what it does rather than something you can force. Survive the ability,
+  // punish the recovery. Every number is in features.hunter and can be reloaded live.
+  ""hunter"": {
+    ""enabled"": true,
+    ""name"": ""The Night"",
+    // Resolved in order, so the first one your install has is the one you get. The juggernaut
+    // is the intent: armoured, faceless and far too large. Point this at an add-on model if you
+    // have something better.
+    ""models"": [ ""u_m_y_juggernaut_01"", ""s_m_y_blackops_03"", ""s_m_y_blackops_01"", ""s_m_m_highsec_01"" ],
+    ""resolve"": 2400,
+    ""health"": 5000,
+    ""weapon"": ""WEAPON_MACHETE"",
+    ""spawnDistance"": 80
+  },
+
+  ""escalation"": {
+    ""phases"": [
+      { ""name"": ""Something Is Wrong"", ""durationSeconds"": 90 },
+      { ""name"": ""The Bodies"", ""durationSeconds"": 180, ""fires"": true, ""killThreshold"": 8 },
+      { ""name"": ""Nowhere Left To Go"", ""durationSeconds"": 0, ""fires"": true, ""blackout"": true }
+    ]
+  },
+
+  ""factions"": {
+    ""public"": {
+      ""name"": ""People"", ""reaction"": ""Mixed"", ""fightBackChance"": 0.2,
+      ""recruits"": ""civilian"", ""share"": 4,
+      ""playerRelationship"": ""neutral"",
+      ""armedChance"": 0.25, ""ammo"": 60,
+      ""weapons"": [
+        { ""name"": ""Bat"", ""weight"": 3 }, { ""name"": ""Bottle"", ""weight"": 3 },
+        { ""name"": ""Pistol"", ""weight"": 1 }
+      ],
+      ""blip"": { ""enabled"": false }
+    },
+
+    // They turn up because of the bodies, not because of you. Standing next to them is the
+    // closest thing this mode has to safety, and it does not last.
+    ""police"": {
+      ""name"": ""LSPD"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 1,
+      ""playerRelationship"": ""neutral"",
+      ""armedChance"": 1.0, ""ammo"": 250, ""armour"": 50, ""accuracy"": 35,
+      ""weapons"": [
+        { ""name"": ""Pistol"", ""weight"": 3 }, { ""name"": ""PumpShotgun"", ""weight"": 2 },
+        { ""name"": ""CarbineRifle"", ""weight"": 1 }
+      ],
+      ""spawn"": {
+        ""models"": [ ""s_m_y_cop_01"", ""s_f_y_cop_01"", ""s_m_y_hwaycop_01"" ],
+        ""vehicles"": [ ""police"", ""police2"", ""police3"", ""sheriff"" ],
+        ""maxAlive"": 10, ""perWave"": 4, ""waveIntervalMs"": 25000,
+        ""minDistance"": 120, ""maxDistance"": 220, ""inVehicleChance"": 1, ""occupants"": 2, ""vehiclesPerWave"": 1,
+        ""siren"": true
+      },
+      ""blip"": { ""enabled"": true, ""sprite"": ""PoliceOfficer"", ""colour"": ""Blue"" }
+    }
+  },
+
+  ""relations"": [
+    { ""from"": ""police"", ""to"": ""public"", ""value"": ""like"", ""mutual"": true }
+  ],
+
+  ""ambience"": { ""weather"": ""THUNDER"", ""hour"": 1, ""minute"": 30 },
+
+  ""config"": {
+    ""riot"": { ""conversionChance"": 0.5 },
+    ""combat"": { ""accuracy"": 15 },
+    // Nothing else in the street should be competing for your attention.
+    ""features"": {
+      ""pursuit"": { ""enabled"": false },
+      ""looting"": { ""enabled"": false },
+      ""spectacle"": { ""barricades"": false }
+    }
+  }
+}
+";
+
+        private const string Chase = @"{
+  ""_stock"": true,
+  ""name"": ""Car Chase"",
+  ""order"": 25,
+  ""description"": ""Somebody put a price on you. It goes up. Nothing here is fighting anything except you, and it does not stop until you do."",
+  ""enabled"": true,
+  ""playerRelationship"": ""hate"",
+
+  // Waves are counted from the body count rather than from a timer, so the escalation is a
+  // consequence of how well you are doing. Standing still does not advance it; winning does.
+  ""manhunt"": { ""enabled"": true, ""killsPerWave"": 5, ""announce"": true },
+
+  ""escalation"": {
+    ""phases"": [
+      { ""name"": ""Word Gets Around"", ""durationSeconds"": 90, ""killThreshold"": 0 },
+      { ""name"": ""Serious People"", ""durationSeconds"": 120, ""killThreshold"": 5 },
+      { ""name"": ""Professionals"", ""durationSeconds"": 150, ""killThreshold"": 14 },
+      { ""name"": ""Contractors"", ""durationSeconds"": 180, ""killThreshold"": 26 },
+      { ""name"": ""Whatever It Takes"", ""durationSeconds"": 0, ""killThreshold"": 40 }
+    ]
+  },
+
+  ""factions"": {
+    ""bounty"": {
+      ""name"": ""Chancers"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1,
+      ""armedChance"": 0.9, ""ammo"": 150, ""armour"": 0, ""accuracy"": 20,
+      ""weapons"": [
+        { ""name"": ""Pistol"", ""weight"": 4 }, { ""name"": ""SNSPistol"", ""weight"": 3 },
+        { ""name"": ""MicroSMG"", ""weight"": 2 }, { ""name"": ""Bat"", ""weight"": 2 }
+      ],
+      ""spawn"": {
+        ""models"": [ ""g_m_y_ballasout_01"", ""g_m_y_famca_01"", ""g_m_y_mexgoon_01"", ""g_f_y_ballas_01"" ],
+        ""vehicles"": [ ""manana"", ""peyote"", ""tornado"", ""emperor"", ""chino"" ],
+        ""maxAlive"": 12, ""perWave"": 3, ""waveIntervalMs"": 15000,
+        ""minDistance"": 130, ""maxDistance"": 240, ""inVehicleChance"": 1, ""occupants"": 3, ""vehiclesPerWave"": 1
+      },
+      ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Orange"" }
+    },
+
+    ""crews"": {
+      ""name"": ""Crews"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 1,
+      ""armedChance"": 1.0, ""ammo"": 250, ""armour"": 25, ""accuracy"": 28,
+      ""weapons"": [
+        { ""name"": ""MicroSMG"", ""weight"": 4 }, { ""name"": ""SawnOffShotgun"", ""weight"": 3 },
+        { ""name"": ""SMG"", ""weight"": 2 }, { ""name"": ""APPistol"", ""weight"": 2 }
+      ],
+      ""spawn"": {
+        ""models"": [ ""g_m_y_lost_01"", ""g_m_y_lost_02"", ""g_m_y_lost_03"", ""g_m_y_mexgang_01"" ],
+        ""vehicles"": [ ""gburrito2"", ""buccaneer"", ""vamos"", ""hexer"", ""daemon"" ],
+        ""maxAlive"": 14, ""perWave"": 4, ""waveIntervalMs"": 16000,
+        ""minDistance"": 130, ""maxDistance"": 240, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 2
+      },
+      ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Purple"" }
+    },
+
+    ""pros"": {
+      ""name"": ""Professionals"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 2,
+      ""armedChance"": 1.0, ""ammo"": 300, ""armour"": 75, ""accuracy"": 38, ""health"": 175,
+      ""weapons"": [
+        { ""name"": ""CarbineRifle"", ""weight"": 4 }, { ""name"": ""AssaultRifle"", ""weight"": 3 },
+        { ""name"": ""PumpShotgun"", ""weight"": 2 }, { ""name"": ""SmokeGrenade"", ""weight"": 1 }
+      ],
+      ""spawn"": {
+        ""models"": [ ""s_m_m_armoured_01"", ""s_m_y_blackops_01"", ""s_m_m_highsec_01"" ],
+        ""vehicles"": [ ""schafter2"", ""fq2"", ""granger"", ""dubsta2"", ""baller"" ],
+        ""maxAlive"": 14, ""perWave"": 4, ""waveIntervalMs"": 18000,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 2
+      },
+      ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""RedDark"" }
+    },
+
+    ""contractors"": {
+      ""name"": ""Contractors"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 3,
+      ""armedChance"": 1.0, ""ammo"": 400, ""armour"": 100, ""accuracy"": 45, ""health"": 200,
+      ""weapons"": [
+        { ""name"": ""SpecialCarbine"", ""weight"": 4 }, { ""name"": ""CarbineRifle"", ""weight"": 3 },
+        { ""name"": ""CombatMG"", ""weight"": 1 }
+      ],
+      ""spawn"": {
+        ""models"": [ ""s_m_y_blackops_01"", ""s_m_y_blackops_02"", ""s_m_y_marine_01"" ],
+        ""vehicles"": [ ""insurgent"", ""insurgent2"", ""crusader"", ""barracks"" ],
+        ""maxAlive"": 12, ""perWave"": 4, ""waveIntervalMs"": 24000,
+        ""minDistance"": 150, ""maxDistance"": 280, ""inVehicleChance"": 1, ""occupants"": 4, ""vehiclesPerWave"": 1,
+        ""driveThroughCrowds"": true
+      },
+      ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Red"" }
+    },
+
+    // The last thing that happens to a car chase, which is that it stops being one.
+    ""air"": {
+      ""name"": ""Air Support"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 4,
+      ""armedChance"": 1.0, ""ammo"": 400, ""armour"": 100, ""accuracy"": 35,
+      ""weapons"": [ { ""name"": ""CarbineRifle"", ""weight"": 3 }, { ""name"": ""SMG"", ""weight"": 1 } ],
+      ""spawn"": {
+        ""models"": [ ""s_m_y_blackops_01"", ""s_m_y_pilot_01"" ],
+        ""vehicles"": [ ""buzzard"", ""frogger"", ""annihilator"" ],
+        ""vehicleType"": ""air"", ""flightHeight"": 50, ""footFallback"": false,
+        ""maxAlive"": 4, ""perWave"": 2, ""waveIntervalMs"": 55000,
+        ""inVehicleChance"": 1.0, ""occupants"": 2, ""vehiclesPerWave"": 1,
+        ""minDistance"": 100, ""maxDistance"": 180
+      },
+      ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""RedLight"" }
+    }
+  },
+
+  // Everybody here is on the same side and that side is not yours.
+  ""relations"": [
+    { ""from"": ""bounty"", ""to"": ""crews"",       ""value"": ""companion"", ""mutual"": true },
+    { ""from"": ""bounty"", ""to"": ""pros"",        ""value"": ""companion"", ""mutual"": true },
+    { ""from"": ""crews"",  ""to"": ""pros"",        ""value"": ""companion"", ""mutual"": true },
+    { ""from"": ""pros"",   ""to"": ""contractors"", ""value"": ""companion"", ""mutual"": true },
+    { ""from"": ""crews"",  ""to"": ""contractors"", ""value"": ""companion"", ""mutual"": true },
+    { ""from"": ""bounty"", ""to"": ""air"",         ""value"": ""companion"", ""mutual"": true },
+    { ""from"": ""contractors"", ""to"": ""air"",    ""value"": ""companion"", ""mutual"": true }
+  ],
+
+  ""config"": {
+    // Nobody is recruited. The street stays a street and everything after you arrived to be.
+    ""riot"": { ""convertAmbientPeds"": false },
+    // The one mode where being converged on by cars is the point rather than the bug, so the
+    // limits that keep ordinary riots survivable are lifted here and only here.
+    ""vehicles"": {
+      ""huntPlayerWeight"": 12, ""huntEnemyWeight"": 0, ""dismountWeight"": 2, ""fleePlayerWeight"": 0,
+      ""maxHuntingPlayer"": 6, ""driveBys"": true
+    },
+    ""combat"": { ""maxPlayerAttackers"": 8, ""accuracy"": 25 },
+    ""features"": {
+      ""looting"": { ""enabled"": false },
+      ""spectacle"": { ""barricades"": false },
+      ""police"": { ""playerStandoff"": 8 }
+    },
+    ""density"": { ""pedMultiplier"": 1.0, ""vehicleMultiplier"": 1.0 }
+  }
+}
+";
+
+        private const string Contagion = @"{
+  ""_stock"": true,
+  ""name"": ""Patient Zero"",
+  ""order"": 75,
+  // Infected and uninfected are both pedestrians, and the whole mode is one turning into the
+  // other. Saying so keeps the build from treating it as the Martial Law bug.
+  ""crowdFightsItself"": true,
+  ""description"": ""It spreads by reaching people. Kill the right ones and it stops; leave it and the district is gone."",
+  ""enabled"": true,
+  ""playerRelationship"": ""hate"",
+
+  // The third supply line. Every other mode is fed by converting the crowd near you and by
+  // spawning; this one grows where its members physically are, so it moves outward, thins where
+  // it is being killed, and gets worse the longer it is left. It is the only thing here that
+  // can be contained by killing the right people rather than by a setting.
+  ""contagion"": {
+    ""enabled"": true,
+    ""source"": ""infected"",
+    ""target"": ""public"",
+    ""radius"": 3.5,
+    ""chance"": 0.5,
+    ""intervalMs"": 1100,
+    ""perPass"": 3,
+    ""samplesPerPass"": 20,
+    ""max"": 0
+  },
+
+  ""escalation"": {
+    ""phases"": [
+      { ""name"": ""An Incident"", ""durationSeconds"": 90 },
+      { ""name"": ""It Is Spreading"", ""durationSeconds"": 180, ""fires"": true, ""killThreshold"": 12 },
+      { ""name"": ""Quarantine"", ""durationSeconds"": 0, ""fires"": true, ""barricades"": true, ""blackout"": true }
+    ]
+  },
+
+  ""factions"": {
+    // A handful to start it. Everything after this is spread rather than recruited, which is
+    // why the share is so low - if this recruited at any real rate the contagion would be
+    // decoration on top of an ordinary riot.
+    ""infected"": {
+      ""name"": ""Infected"", ""reaction"": ""Fight"", ""recruits"": ""civilian"", ""share"": 0.05,
+      ""playerRelationship"": ""hate"",
+      ""armedChance"": 0.15, ""ammo"": 40, ""health"": 160, ""accuracy"": 5,
+      ""weapons"": [ { ""name"": ""Knife"", ""weight"": 2 }, { ""name"": ""Hammer"", ""weight"": 1 } ],
+      ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""GreenDark"" }
+    },
+
+    ""public"": {
+      ""name"": ""Uninfected"", ""reaction"": ""Mixed"", ""fightBackChance"": 0.3,
+      ""recruits"": ""civilian"", ""share"": 4,
+      ""playerRelationship"": ""neutral"",
+      ""armedChance"": 0.3, ""ammo"": 80,
+      ""weapons"": [
+        { ""name"": ""Bat"", ""weight"": 3 }, { ""name"": ""Crowbar"", ""weight"": 2 },
+        { ""name"": ""Pistol"", ""weight"": 2 }, { ""name"": ""PumpShotgun"", ""weight"": 1 }
+      ],
+      ""blip"": { ""enabled"": false }
+    },
+
+    // They are not here to help anybody. Everything inside the line is a risk, including you.
+    ""cordon"": {
+      ""name"": ""Cordon"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 2,
+      ""playerRelationship"": ""hate"",
+      ""armedChance"": 1.0, ""ammo"": 350, ""armour"": 100, ""accuracy"": 40, ""health"": 200,
+      ""weapons"": [
+        { ""name"": ""CarbineRifle"", ""weight"": 4 }, { ""name"": ""PumpShotgun"", ""weight"": 2 },
+        { ""name"": ""SmokeGrenade"", ""weight"": 1 }
+      ],
+      ""spawn"": {
+        ""models"": [ ""s_m_y_marine_01"", ""s_m_y_marine_02"", ""s_m_m_marine_01"" ],
+        ""vehicles"": [ ""barracks"", ""crusader"", ""riot"" ],
+        ""maxAlive"": 16, ""perWave"": 5, ""waveIntervalMs"": 20000,
+        ""minDistance"": 140, ""maxDistance"": 260, ""inVehicleChance"": 1, ""occupants"": 5, ""vehiclesPerWave"": 1,
+        ""driveThroughCrowds"": true
+      },
+      ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""Green"" }
+    }
+  },
+
+  ""relations"": [
+    { ""from"": ""infected"", ""to"": ""public"",   ""value"": ""hate"",    ""mutual"": true },
+    { ""from"": ""cordon"",   ""to"": ""infected"", ""value"": ""hate"",    ""mutual"": true },
+    { ""from"": ""cordon"",   ""to"": ""public"",   ""value"": ""dislike"", ""mutual"": false }
+  ],
+
+  ""config"": {
+    // High, because the crowd is the raw material for both sides of this one.
+    ""riot"": { ""conversionChance"": 0.75 },
+    ""combat"": { ""accuracy"": 12 },
+    ""density"": { ""pedMultiplier"": 2.0 }
   }
 }
 ";

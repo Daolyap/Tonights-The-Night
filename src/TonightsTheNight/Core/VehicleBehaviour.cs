@@ -45,7 +45,14 @@ namespace TonightsTheNight.Core
                 Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver, _config.GetFloat("features.police.aggressiveness", 1f));
                 Function.Call(Hash.SET_DRIVER_ABILITY, driver, _config.GetFloat("features.police.driverAbility", 1f));
 
-                if (faction.Spawn.DriveThroughCrowds && _config.GetBool("features.police.driveThroughCrowds", true))
+                // Ploughing through a crowd is atmosphere. Ploughing through the crowd while
+                // aimed at you personally is a car chase you did not agree to, so a driver whose
+                // target is the player keeps their steering.
+                bool ploughs = faction.Spawn.DriveThroughCrowds &&
+                               _config.GetBool("features.police.driveThroughCrowds", true) &&
+                               (target == null || !target.Exists() || target.Handle != Game.Player.Character.Handle);
+
+                if (ploughs)
                 {
                     Function.Call(Hash.SET_PED_STEERS_AROUND_PEDS, driver, false);
                     Function.Call(Hash.SET_PED_STEERS_AROUND_VEHICLES, driver, false);
@@ -68,15 +75,30 @@ namespace TonightsTheNight.Core
                     return;
                 }
 
+                // Driving *at* a person is a different thing from driving at a car, and the
+                // target here is often the player on foot. A squad car told to attack one ends
+                // up resolving it with the bumper, which is where "the police keep running me
+                // over" came from - so a target that is the player gets followed instead, from
+                // a standoff distance, and the officers get out and shoot like officers.
+                bool afterPlayer = target.Handle == Game.Player.Character.Handle;
+
+                int mission = afterPlayer
+                    ? _config.GetInt("features.police.playerVehicleMission", 7)   // 7 = follow
+                    : _config.GetInt("features.police.vehicleMission", 6);        // 6 = attack
+
+                float reached = afterPlayer
+                    ? _config.GetFloat("features.police.playerStandoff", 15f)
+                    : _config.GetFloat("features.police.targetReachedDistance", 5f);
+
                 // Mission type and driving style are community-documented rather than official,
-                // so both are config-exposed: if the ramming reads wrong, it is a config edit
+                // so both are config-exposed: if the driving reads wrong, it is a config edit
                 // and a reload rather than a new build.
                 Function.Call(Hash.TASK_VEHICLE_MISSION_PED_TARGET,
                     driver, vehicle, target,
-                    _config.GetInt("features.police.vehicleMission", 6),      // 6 = ram
+                    mission,
                     _config.GetFloat("features.police.cruiseSpeed", 45f),
                     _config.GetInt("features.police.drivingStyle", 786603),
-                    _config.GetFloat("features.police.targetReachedDistance", 5f),
+                    reached,
                     _config.GetFloat("features.police.straightLineDistance", 8f),
                     true);
             }

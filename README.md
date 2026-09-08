@@ -2,11 +2,11 @@
 
 A configurable riot mod for Grand Theft Auto V.
 
-Nine riot modes built from **factions** — who they are, what they carry, who they hate, and how
-they react when it starts. Modes and factions are JSON files, not code, so a custom faction needs
-no build step. Every optional feature is a switch with its own settings block.
+Twelve modes built from **factions** — who they are, what they carry, who they hate, and how they
+react when it starts. Modes and factions are JSON files, not code, so a custom faction needs no
+build step. Every optional feature is a switch with its own settings block.
 
-**Version 0.9.0.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
+**Version 1.0.0.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
 ScriptHookVDotNet 3 and [LemonUI](https://www.gta5-mods.com/tools/lemonui). **F6** opens the
 menu.
 
@@ -15,19 +15,34 @@ menu.
 | Mode | |
 |---|---|
 | Pedestrian Riot | Two mobs form out of the crowd |
+| **Tonight's The Night** | One thing is coming for you. Ground, air and water. It is beatable |
 | Pedestrian Chaos | A free-for-all. Only your passengers are on your side |
+| **Car Chase** | A price on your head that goes up. It ends when you do |
 | Gang War | Four gangs settle up at once |
 | Police State | Sirens on, driving through crowds, helicopters overhead |
 | Martial Law | Police, then infantry, then armour, helicopters, boats and jets |
 | Animal Uprising | Deliberately silly |
 | Invasion | Ships overhead, and aliens walking out from under them |
-| The Purge | Twelve minutes, then it stops |
+| **Patient Zero** | An infection that spreads by reaching people, and a cordon that shoots everyone |
+| The Purge | Twelve minutes, a siren, and then it stops |
 | Everything | All of it, escalating through four phases |
 
 ## What it does
 
+**Something that hunts you.** Tonight's The Night is one fight rather than a riot. Its health is
+pinned and meaningless; damage goes into a separate pool at a fraction of its value, in whole
+while it is staggered — and staggering it is a consequence of what it does, not something you can
+force. Survive the ability, punish the recovery. Sustained fire opens it up on its own, and a big
+hit always counts for more than its share, so the rocket launcher in your boot matters.
+
+**An infection that spreads.** Every other mode is fed by converting the crowd near you and by
+spawning, both capped. Patient Zero grows where its members physically are, so it moves outward,
+thins where it is being killed, and gets worse the longer it is left.
+
 **Car chases.** Hurt someone and drive away, and their side comes after you — a whole carload of
 them, who run to the same vehicle and get in before it sets off. Passengers lean out and shoot.
+Or pick Car Chase and skip the provocation: five waves of escalation, counted from your own body
+count rather than a timer.
 
 **Rioters who drive.** Someone already behind a wheel decides for themselves: get out and fight,
 chase another rioter, come after you, or get out of your way. Four weights, all sliders.
@@ -50,9 +65,20 @@ and the response stays a patrol; destroy three carloads and the next ones come i
 **Riot zones.** Confine it to a radius around you or let it run citywide. The single most
 effective performance control here.
 
-**Weapon presets.** Realistic, armed and armoured, military, chaos, or your own weighted list.
+**Weapon presets.** Melee only, realistic, armed and armoured, military, chaos — or build your own
+in the menu, weapon by weapon, with a weight on each.
 
-**Plus** looting, fires, five profile slots, a debug overlay, and config hot-reload on **F5**.
+**Only so much of it is aimed at you.** Hostility is a property of a group and a group has no
+size, so without a ceiling every soldier who can see you is individually trying to kill you. A
+handful come; the rest carry on fighting each other and rotate back round later. There is a
+ceiling on how many cars can be after you, too, and a driver who is after you tails you rather
+than driving through you.
+
+**One slider for how much.** Intensity scales every spawning faction's wave size, ceiling and
+arrival rate at once. It is the answer to any mode being too much or not enough.
+
+**Plus** looting with props that sit correctly in a hand, a configurable blackout with a flicker,
+fires, five profile slots, a debug overlay, and config hot-reload on **F5**.
 
 ## What it does not do
 

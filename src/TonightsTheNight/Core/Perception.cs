@@ -98,6 +98,16 @@ namespace TonightsTheNight.Core
                 return;
             }
 
+            // Nothing in this mode would come for you even with a clear view, so there is
+            // nothing to notice and nothing to lose you. Without this, a mode where the player
+            // is neutral to every faction - Tonight's The Night is one - spends twenty seconds
+            // deciding it cannot see you and then announces that they have lost you.
+            if (_hostile.Count == 0)
+            {
+                if (Spotted) { Spotted = false; Reason = "nobody is looking for you"; }
+                return;
+            }
+
             if (Game.GameTime < _nextCheckAt) { return; }
             _nextCheckAt = Game.GameTime + _config.GetInt("features.perception.checkIntervalMs", 400);
 

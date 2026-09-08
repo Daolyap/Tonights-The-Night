@@ -27,10 +27,28 @@ namespace TonightsTheNight.Core
         {
             public Prop Prop;
             public Blip Blip;
+
+            /// <summary>Position in the formation. Decides its lane, its altitude and its phase.</summary>
+            public int Slot;
+
             public double Angle;
+
+            /// <summary>The mode's declared orbit, before this craft's lane and tier are applied.</summary>
+            public float BaseRadius;
+            public float BaseHeight;
+
             public float Radius;
             public float Height;
             public float Bob;
+
+            /// <summary>Where it is heading this frame, before separation is applied.</summary>
+            public Vector3 Desired;
+
+            /// <summary>Where it actually is, held here so movement can be smoothed towards Desired.</summary>
+            public Vector3 Current;
+
+            /// <summary>False until the first move, so a new craft starts where it was created.</summary>
+            public bool Placed;
         }
 
         private readonly ConfigStore _config;
@@ -41,6 +59,15 @@ namespace TonightsTheNight.Core
         private List<Model> _resolved;
         private int _nextUpdateAt;
         private bool _reportedNone;
+
+        /// <summary>
+        /// Shared phase for the whole formation, advanced in real time rather than per update.
+        ///
+        /// This used to be a per-craft angle stepped by a fixed amount inside the throttled
+        /// update, which meant every ship jumped four times a second regardless of frame rate —
+        /// the "choppy" part. Time drives it now, and the props are moved every tick.
+        /// </summary>
+        private double _phase;
 
         public int Active { get { return _craft.Count; } }
 
@@ -59,6 +86,7 @@ namespace TonightsTheNight.Core
             _resolved = null;
             _reportedNone = false;
             _nextUpdateAt = 0;
+            _phase = 0;
         }
 
         public void Clear()
@@ -81,6 +109,10 @@ namespace TonightsTheNight.Core
         /// <summary>
         /// A point underneath one of the craft, or Vector3.Zero when nothing is overhead. The
         /// spawner uses this so arrivals happen below the ship rather than behind a hedge.
+        ///
+        /// Falls back to the ground under the ship when the navmesh has nothing to offer, which
+        /// is the normal case out in the desert and was previously the reason an invasion in a
+        /// quiet area produced no aliens at all.
         /// </summary>
         public Vector3 DropPoint()
         {
@@ -92,10 +124,12 @@ namespace TonightsTheNight.Core
             Vector3 under = craft.Prop.Position;
             float scatter = _config.GetFloat("features.craft.dropScatter", 20f);
 
-            return World.GetSafeCoordForPed(new Vector3(
+            var candidate = new Vector3(
                 under.X + (float)(_random.NextDouble() * 2 - 1) * scatter,
                 under.Y + (float)(_random.NextDouble() * 2 - 1) * scatter,
-                under.Z));
+                under.Z);
+
+            return Ground.Place(candidate);
         }
 
         /// <summary>
@@ -110,11 +144,16 @@ namespace TonightsTheNight.Core
                 return;
             }
 
-            if (Game.GameTime < _nextUpdateAt) { return; }
-            _nextUpdateAt = Game.GameTime + _config.GetInt("features.craft.updateIntervalMs", 250);
+            // Streaming and blip work is throttled; moving is not. A fleet that only updates
+            // four times a second visibly steps rather than flies.
+            if (Game.GameTime >= _nextUpdateAt)
+            {
+                _nextUpdateAt = Game.GameTime + _config.GetInt("features.craft.updateIntervalMs", 250);
+                Prune();
+                TopUp(declared, centre);
+                Reslot();
+            }
 
-            Prune();
-            TopUp(declared, centre);
             Drift(centre);
         }
 
@@ -152,16 +191,26 @@ namespace TonightsTheNight.Core
 
             var craft = new Craft
             {
-                Angle = _random.NextDouble() * Math.PI * 2.0,
-                Radius = declared["orbitRadius"].AsFloat(90f),
-                Height = declared["height"].AsFloat(110f),
+                Slot = _craft.Count,
+                BaseRadius = declared["orbitRadius"].AsFloat(90f),
+                BaseHeight = declared["height"].AsFloat(110f),
                 Bob = (float)_random.NextDouble() * 6f
             };
 
-            Vector3 position = PositionOf(craft, centre);
+            _craft.Add(craft);
+            Reslot();
+            ApplyFormation(craft, centre);
+
+            Vector3 position = craft.Desired;
+            craft.Current = position;
+            craft.Placed = true;
 
             Prop prop = World.CreateProp(model, position, false, false);
-            if (prop == null || !prop.Exists()) { return; }
+            if (prop == null || !prop.Exists())
+            {
+                _craft.Remove(craft);
+                return;
+            }
 
             craft.Prop = prop;
 
@@ -187,25 +236,82 @@ namespace TonightsTheNight.Core
                 Log.Error("Could not prepare a craft", ex);
             }
 
-            _craft.Add(craft);
-            Log.Info("Craft on station: " + _craft.Count + " overhead.");
+            Log.Info("Craft on station: " + _craft.Count + " overhead, slot " + craft.Slot + ".");
+        }
+
+        /// <summary>
+        /// Renumbers the formation after an addition or a loss.
+        ///
+        /// Slots are what stop the fleet occupying the same piece of sky. Each craft owns one
+        /// share of the orbit, one lane and one altitude band, so two of them cannot converge
+        /// however long they fly. Before this they all shared a radius, a height and an angular
+        /// speed, and were given random starting angles — so two that happened to start close
+        /// together stayed inside each other for the whole invasion.
+        /// </summary>
+        private void Reslot()
+        {
+            for (int i = 0; i < _craft.Count; i++) { _craft[i].Slot = i; }
+        }
+
+        /// <summary>Where a craft's slot says it should be, before separation and smoothing.</summary>
+        private void ApplyFormation(Craft craft, Vector3 centre)
+        {
+            int total = Math.Max(1, _craft.Count);
+
+            // Alternating lanes, so an odd fleet does not put every ship on the same circle.
+            float lane = ((craft.Slot % 3) - 1) * _config.GetFloat("features.craft.radiusSpread", 25f);
+            // Stacked altitudes. Two ships directly above one another still never touch.
+            float tier = craft.Slot * _config.GetFloat("features.craft.heightSpread", 18f);
+
+            craft.Radius = Math.Max(20f, craft.BaseRadius + lane);
+            craft.Height = craft.BaseHeight + tier;
+            craft.Angle = _phase + craft.Slot * (Math.PI * 2.0 / total);
+
+            craft.Desired = new Vector3(
+                centre.X + (float)Math.Cos(craft.Angle) * craft.Radius,
+                centre.Y + (float)Math.Sin(craft.Angle) * craft.Radius,
+                centre.Z + craft.Height + (float)Math.Sin(craft.Bob) * 3f);
         }
 
         private void Drift(Vector3 centre)
         {
-            float speed = _config.GetFloat("features.craft.orbitSpeed", 0.06f);
+            if (_craft.Count == 0) { return; }
+
+            // Real seconds, so the fleet moves at the same speed at 30fps and at 120.
+            float delta = Game.LastFrameTime;
+            if (delta <= 0f || delta > 0.5f) { delta = 1f / 60f; }
+
+            _phase += _config.GetFloat("features.craft.orbitSpeed", 0.06f) * delta;
+
+            foreach (Craft craft in _craft)
+            {
+                craft.Bob += delta * 0.6f;
+                ApplyFormation(craft, centre);
+            }
+
+            Separate();
+
+            float smoothing = _config.GetFloat("features.craft.smoothing", 6f);
+            float blend = smoothing <= 0f ? 1f : Math.Min(1f, smoothing * delta);
 
             foreach (Craft craft in _craft)
             {
                 if (craft.Prop == null || !craft.Prop.Exists()) { continue; }
 
-                craft.Angle += speed * 0.25;
-                craft.Bob += 0.08f;
+                if (!craft.Placed)
+                {
+                    craft.Current = craft.Desired;
+                    craft.Placed = true;
+                }
+                else
+                {
+                    craft.Current += (craft.Desired - craft.Current) * blend;
+                }
 
                 try
                 {
                     // Frozen, so it is moved rather than flown. Anything else and it falls.
-                    craft.Prop.Position = PositionOf(craft, centre);
+                    craft.Prop.Position = craft.Current;
                     craft.Prop.Heading = (float)(craft.Angle * 180.0 / Math.PI) + 90f;
                 }
                 catch (Exception ex)
@@ -215,12 +321,41 @@ namespace TonightsTheNight.Core
             }
         }
 
-        private Vector3 PositionOf(Craft craft, Vector3 centre)
+        /// <summary>
+        /// Pushes any two ships that have ended up too close apart along the line between them.
+        ///
+        /// The slots make convergence very unlikely on their own, but the orbit centre moves
+        /// with the player, a fleet can lose a member mid-flight and renumber, and a mode is
+        /// free to declare a tiny orbit radius. This is the guarantee rather than the plan.
+        /// </summary>
+        private void Separate()
         {
-            return new Vector3(
-                centre.X + (float)Math.Cos(craft.Angle) * craft.Radius,
-                centre.Y + (float)Math.Sin(craft.Angle) * craft.Radius,
-                centre.Z + craft.Height + (float)Math.Sin(craft.Bob) * 3f);
+            float minimum = _config.GetFloat("features.craft.minSeparation", 45f);
+            if (minimum <= 0f || _craft.Count < 2) { return; }
+
+            float minimumSquared = minimum * minimum;
+
+            for (int i = 0; i < _craft.Count; i++)
+            {
+                for (int j = i + 1; j < _craft.Count; j++)
+                {
+                    Vector3 offset = _craft[j].Desired - _craft[i].Desired;
+                    float distanceSquared = offset.LengthSquared();
+
+                    if (distanceSquared >= minimumSquared) { continue; }
+
+                    // Exactly coincident has no direction to push along, so invent one from
+                    // the slot numbers rather than dividing by zero.
+                    Vector3 push = distanceSquared < 0.01f
+                        ? new Vector3((float)Math.Cos(i * 2.4), (float)Math.Sin(i * 2.4), 0.35f)
+                        : offset.Normalized;
+
+                    float correction = (minimum - (float)Math.Sqrt(distanceSquared)) * 0.5f;
+
+                    _craft[i].Desired -= push * correction;
+                    _craft[j].Desired += push * correction;
+                }
+            }
         }
     }
 }

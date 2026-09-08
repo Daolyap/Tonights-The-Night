@@ -40,11 +40,11 @@ namespace TonightsTheNight.Factions
         public const string UseMode = "mode";
 
         /// <summary>Ids in menu order. "mode" first because it is the default.</summary>
-        public static readonly string[] Ids = { UseMode, "realistic", "armed", "military", "chaos", "custom" };
+        public static readonly string[] Ids = { UseMode, "melee", "realistic", "armed", "military", "chaos", "custom" };
 
         public static readonly string[] Names =
         {
-            "Mode's Own", "Realistic", "Armed And Armoured", "Military", "Chaos", "Custom"
+            "Mode's Own", "Melee Only", "Realistic", "Armed And Armoured", "Military", "Chaos", "Custom"
         };
 
         private static readonly Dictionary<string, WeaponPreset> Built =
@@ -149,6 +149,33 @@ namespace TonightsTheNight.Factions
         private static Dictionary<string, WeaponPreset> Stock()
         {
             if (Built.Count > 0) { return Built; }
+
+            // Melee only. Not a novelty setting: with nothing that shoots, a riot stops killing
+            // its own participants faster than the game can stream replacements, so it is by
+            // some distance the longest-lived and densest thing this mod can produce. It is also
+            // the only preset in which a crowd is genuinely dangerous to walk into and genuinely
+            // survivable to fight, which is most of what people want from a riot.
+            Add("melee", "Melee Only",
+                "Nothing that shoots. Bats, blades and bottles - the longest-lasting riot there " +
+                "is, because nobody can clear a street from across it.",
+                1f, 0, 1,
+                new WeaponTable()
+                    .Add("WEAPON_BAT", 5f)
+                    .Add("WEAPON_BOTTLE", 4f)
+                    .Add("WEAPON_CROWBAR", 3.5f)
+                    .Add("WEAPON_GOLFCLUB", 3f)
+                    .Add("WEAPON_HAMMER", 3f)
+                    .Add("WEAPON_MACHETE", 2.5f)
+                    .Add("WEAPON_KNIFE", 2.5f)
+                    .Add("WEAPON_WRENCH", 2f)
+                    .Add("WEAPON_POOLCUE", 2f)
+                    .Add("WEAPON_HATCHET", 1.5f)
+                    .Add("WEAPON_SWITCHBLADE", 1.5f)
+                    .Add("WEAPON_DAGGER", 1f)
+                    .Add("WEAPON_KNUCKLE", 1f)
+                    .Add("WEAPON_NIGHTSTICK", 1f)
+                    .Add("WEAPON_BATTLEAXE", 0.5f)
+                    .Add("WEAPON_FLASHLIGHT", 0.5f));
 
             // Realistic is deliberately mostly melee. It is not squeamishness: a crowd armed
             // with pistols kills off the local population faster than the game can stream
