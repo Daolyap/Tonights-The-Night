@@ -32,7 +32,11 @@ namespace TonightsTheNight.Core
         private readonly Looting _looting;
         private readonly Reinforcements _reinforcements;
         private readonly SkyCraft _craft;
+        private readonly Hunter _hunter;
+        private readonly Manhunt _manhunt;
+        private readonly Contagion _contagion;
         private readonly Perception _perception;
+        private readonly Attention _attention;
         private readonly Spectacle _spectacle;
 
         public Escalation Escalation { get; private set; }
@@ -44,7 +48,11 @@ namespace TonightsTheNight.Core
         public Looting Looting { get { return _looting; } }
         public Reinforcements Reinforcements { get { return _reinforcements; } }
         public SkyCraft Craft { get { return _craft; } }
+        public Hunter Hunter { get { return _hunter; } }
+        public Manhunt Manhunt { get { return _manhunt; } }
+        public Contagion Contagion { get { return _contagion; } }
         public Perception Perception { get { return _perception; } }
+        public Attention Attention { get { return _attention; } }
         public Spectacle Spectacle { get { return _spectacle; } }
 
         /// <summary>Recruits confirmed dead, as opposed to merely despawned. Drives escalation.</summary>
@@ -81,6 +89,12 @@ namespace TonightsTheNight.Core
         private int _nextVehiclePruneAt;
         private bool _playerMovedGroup;
 
+        /// <summary>
+        /// Whether the player was alive on the previous tick, so death is noticed once rather
+        /// than every frame of the respawn.
+        /// </summary>
+        private bool _playerWasAlive = true;
+
         public RiotMode ActiveMode { get; private set; }
         public bool IsRunning { get { return ActiveMode != null; } }
 
@@ -116,7 +130,11 @@ namespace TonightsTheNight.Core
             _spawner = new Spawner(config, _models, _random, _reinforcements);
             _vehicles = new VehicleBehaviour(config);
             _craft = new SkyCraft(config, _models, _random);
+            _hunter = new Hunter(config, _models, _random);
+            _manhunt = new Manhunt(config);
+            _contagion = new Contagion(config, _random);
             _perception = new Perception(config, _random);
+            _attention = new Attention(config);
             _spectacle = new Spectacle(config, _models, _random);
             _pursuit = new Pursuit(config, _random, _registry);
             _looting = new Looting(config, _models, _random, _registry);
@@ -149,6 +167,7 @@ namespace TonightsTheNight.Core
             BuildHostility(mode);
             // Before the standings, which depend on whether the riot can currently see you.
             _perception.Reset();
+            _attention.Reset();
             ApplyPlayerSide(mode);
 
             // Before the pool, because the pool asks the escalation which factions are allowed
@@ -165,6 +184,12 @@ namespace TonightsTheNight.Core
             _craft.Reset();
             _spectacle.Reset();
 
+            // After the faction groups exist and their relations are written: the hunter is
+            // hostile to every one of them, and to the vanilla groups too.
+            _hunter.Begin(mode.Hunter, _relationships, mode);
+            _manhunt.Begin(mode.Manhunt);
+            _contagion.Begin(mode.Contagion);
+
             ActiveMode = mode;
             Kills = 0;
             RecruitedTotal = 0;
@@ -174,6 +199,7 @@ namespace TonightsTheNight.Core
             PeakTickMs = 0;
             _cursor = 0;
             _budget = _config.GetInt("engine.pedsPerTick", 12);
+            _playerWasAlive = true;
 
             GTA.UI.Notification.Show("~r~Tonight's The Night~s~: " + mode.Name);
         }
@@ -206,6 +232,9 @@ namespace TonightsTheNight.Core
             Zone.Clear();
             Purge.Clear();
             _craft.Clear();
+            _hunter.Clear();
+            _manhunt.Clear();
+            _contagion.Clear();
             _spectacle.Clear();
             _models.Release();
 
@@ -255,6 +284,9 @@ namespace TonightsTheNight.Core
                 Ambience.Clear();
                 Zone.Clear();
                 _craft.Clear();
+                _hunter.Clear();
+                _manhunt.Clear();
+                _contagion.Clear();
                 _spectacle.Clear();
                 // Leaves the wanted ceiling at zero for the rest of the session if skipped,
                 // which would look exactly like the police mod having broken.
@@ -311,26 +343,72 @@ namespace TonightsTheNight.Core
                 // entity moves a quarter-second, and a fleet that freezes mid-air is worse.
                 _craft.Update(ActiveMode.Craft, Zone.Centre, true);
 
+                // Runs whether or not a menu is open, for the same reason the ships do: a thing
+                // that is hunting you should not politely stop while you read a slider. It is
+                // one entity and a handful of natives.
+                _hunter.Update(Zone.Centre);
+
+                if (_hunter.Defeated)
+                {
+                    // Killing it is the win condition, so the mode ends on it rather than
+                    // leaving you standing over a body in a city that is still on fire.
+                    Stop(true);
+                    GTA.UI.Notification.Show("~g~Tonight's The Night~s~: you survived the night.");
+                    return;
+                }
+
                 // The city's own state: the power, the roads, the smoke. Runs whether or not a
                 // menu is open, because a blackout that flickers back on while you read a
                 // slider is worse than no blackout.
                 _spectacle.Update(Zone.Centre, phase, unphased);
 
+                // Every frame, not on the work throttle: it draws, and anything drawn twenty
+                // times a second into a sixty-frame-a-second game flickers.
+                _manhunt.Update(Kills, _registry.Count);
+
+                if (NoteDeath()) { return; }
+
                 _perception.Update(_registry.Tracked);
                 if (_perception.Changed) { OnPerceptionChanged(); }
 
+                bool standingDown = Purge.WindingDown;
+
                 if (!Paused)
                 {
-                    _pursuit.Update(_registry.Tracked, _perception.Spotted);
-                    _looting.Update(_registry.Tracked, unphased || phase.Looting);
+                    // How many of them are allowed to be fighting *you* at once, as opposed to
+                    // how many of them are hostile. Cheap, throttled, and the difference
+                    // between an occupation and a firing squad.
+                    _attention.Update(_registry.Tracked);
+
+                    if (standingDown)
+                    {
+                        // Nothing new starts once the siren has gone.
+                        _pursuit.EndAll();
+                        _looting.EndAll();
+                    }
+                    else
+                    {
+                        _pursuit.Update(_registry.Tracked, _perception.Spotted);
+                        _looting.Update(_registry.Tracked, unphased || phase.Looting);
+                    }
                 }
 
                 // Recruiting and retasking are the expensive half and do not need frame rate.
                 if (!Paused && Game.GameTime >= _nextWorkAt)
                 {
                     _nextWorkAt = Game.GameTime + _config.GetInt("engine.workIntervalMs", 50);
-                    Recruit();
-                    SpawnWaves();
+
+                    if (standingDown)
+                    {
+                        StandDown();
+                    }
+                    else
+                    {
+                        Recruit();
+                        SpawnWaves();
+                        _contagion.Update(_registry.Tracked, ActiveMode, Infect);
+                    }
+
                     ProcessTracked();
                 }
             }
@@ -345,6 +423,34 @@ namespace TonightsTheNight.Core
                 if (LastTickMs > PeakTickMs) { PeakTickMs = LastTickMs; }
                 AdjustBudget();
             }
+        }
+
+        /// <summary>
+        /// Ends the riot when the player dies, if they asked for that.
+        ///
+        /// A riot is something that happened to you, and dying is the end of your part in it.
+        /// Left running, you respawn at a hospital into a city that is still on fire with
+        /// soldiers still looking for you, which is a legitimate thing to want and a terrible
+        /// default - it is indistinguishable from the mod having got stuck.
+        ///
+        /// Returns true when the mode has been stopped, so the caller abandons the tick.
+        /// </summary>
+        private bool NoteDeath()
+        {
+            Ped player = Game.Player.Character;
+            bool alive = player != null && player.Exists() && !player.IsDead;
+
+            if (alive) { _playerWasAlive = true; return false; }
+            if (!_playerWasAlive) { return false; }
+
+            _playerWasAlive = false;
+
+            if (!_config.GetBool("riot.stopOnPlayerDeath", true)) { return false; }
+
+            Log.Info("Player died - stopping the riot.");
+            Stop(true);
+            GTA.UI.Notification.Show("~r~Tonight's The Night~s~: you died. The riot is over.");
+            return true;
         }
 
         /// <summary>
@@ -517,6 +623,81 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
+        /// Moves somebody from one faction to another, mid-riot.
+        ///
+        /// Contagion is the only thing that does this, and it is why the registry stores the
+        /// original group and model rather than the current one: whatever a ped has been
+        /// through since we took it over, it still goes back to the game as it arrived.
+        /// </summary>
+        private void Infect(TrackedPed entry, Faction faction)
+        {
+            if (entry == null || faction == null || !entry.IsUsable) { return; }
+
+            try
+            {
+                entry.Faction = faction;
+                entry.Reaction = faction.ResolveReaction(_random);
+                entry.VehicleRole = VehicleRole.None;
+
+                _conditioner.Apply(entry.Ped, faction, entry.Reaction, _lastFighter, entry, HostileFor(entry));
+                entry.LastTaskedAt = Game.GameTime;
+
+                if (entry.Blip != null && entry.Blip.Exists())
+                {
+                    entry.Blip.Sprite = faction.BlipSprite;
+                    entry.Blip.Color = faction.BlipColor;
+                    entry.Blip.Name = faction.DisplayName;
+                }
+                else
+                {
+                    AttachBlip(entry);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not infect a ped", ex);
+            }
+        }
+
+        /// <summary>
+        /// Talks the riot down during a wind-down, a few people per pass.
+        ///
+        /// The alternative is what the purge used to do: stop the mode, release everybody, and
+        /// let the pacifier clear tasks for five seconds. That works, but it happens at one
+        /// instant, so the event has no ending — it has a cut. Spreading it over the wind-down
+        /// window means the fighting visibly thins out before the mode lets go, which is what
+        /// an ending looks like.
+        /// </summary>
+        private void StandDown()
+        {
+            IReadOnlyList<TrackedPed> tracked = _registry.Tracked;
+            if (tracked.Count == 0) { return; }
+
+            int calmed = 0;
+
+            for (int offset = 0; offset < tracked.Count && calmed < _budget; offset++)
+            {
+                TrackedPed entry = tracked[(_cursor + offset) % tracked.Count];
+
+                if (!entry.IsUsable) { continue; }
+                if (!entry.Ped.IsInCombat) { continue; }
+
+                try
+                {
+                    Function.Call(Hash.CLEAR_PED_TASKS, entry.Ped);
+                    Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, entry.Ped, CombatAttribute.AlwaysFight, false);
+                    entry.Reaction = Reaction.Bystander;
+                    entry.LastTaskedAt = Game.GameTime;
+                    calmed++;
+                }
+                catch (Exception)
+                {
+                    // A ped that vanished mid-pass does not need talking down.
+                }
+            }
+        }
+
+        /// <summary>
         /// Menu-driven skip. Goes through here rather than straight to the Escalation so the
         /// recruit pool is rebuilt, which is what lets a faction that joins at this phase
         /// actually start being recruited.
@@ -571,6 +752,7 @@ namespace TonightsTheNight.Core
                      ", chases " + _pursuit.ActiveChases + "/" + _pursuit.Started +
                      ", reinforcement " + ReinforcementSummary() +
                      ", player " + (_perception.Spotted ? "spotted" : "unseen " + _perception.SecondsSinceSeen + "s") +
+                     ", engaging you " + _attention.Engaged + " (trimmed " + _attention.Trimmed + ")" +
                      ", looting " + _looting.Active + "/" + _looting.Total +
                      ", phase " + Escalation.Current + " '" + Escalation.CurrentName + "'" +
                      ", tick " + LastTickMs.ToString("F2") + "ms, budget " + _budget);
@@ -723,6 +905,10 @@ namespace TonightsTheNight.Core
 
             // Mission peds belong to the story; hijacking them breaks quests in ways that are
             // very hard to attribute back to this mod.
+            // Whatever is hunting you is not a rioter, and handing it a bat and a relationship
+            // group would be both funny and the end of the mode.
+            if (_hunter.Owns(ped)) { return false; }
+
             if (_config.GetBool("compatibility.protectMissionPeds", true) &&
                 Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, ped))
             {
@@ -888,6 +1074,19 @@ namespace TonightsTheNight.Core
             // A chase or a looting run is a task of its own; re-issuing "fight whoever is
             // nearby" over the top of one is how a chase ends at the first junction.
             if (entry.InPursuit || entry.Looting) { return false; }
+
+            // Drivers are the exception to everything below.
+            //
+            // A vehicle mission expires, and a driver whose passengers are shooting reads as
+            // "in combat" for the whole chase - so the ordinary "leave a busy ped alone" rule
+            // meant a car that had been given one mission never got another. It drifts to the
+            // end of it and parks, which is most of why a chase used to end at nothing in
+            // particular. They get a longer interval instead of an exemption.
+            if (entry.VehicleRole != VehicleRole.None && entry.Ped.IsInVehicle())
+            {
+                return Game.GameTime - entry.LastTaskedAt >= retaskAfterMs * 2;
+            }
+
             if (Game.GameTime - entry.LastTaskedAt < retaskAfterMs) { return false; }
 
             Ped ped = entry.Ped;

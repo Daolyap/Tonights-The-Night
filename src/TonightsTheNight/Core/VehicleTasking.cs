@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using GTA;
 using GTA.Native;
 using TonightsTheNight.Config;
@@ -44,6 +45,13 @@ namespace TonightsTheNight.Core
         private readonly ConfigStore _config;
         private readonly Random _random;
 
+        /// <summary>
+        /// Drivers currently assigned to come after the player, and when that assignment goes
+        /// stale. Self-contained rather than plumbed through the Director, because the only
+        /// question being asked is "have enough people already decided this".
+        /// </summary>
+        private readonly Dictionary<int, int> _huntingPlayer = new Dictionary<int, int>();
+
         public VehicleTasking(ConfigStore config, Random random)
         {
             _config = config;
@@ -63,8 +71,17 @@ namespace TonightsTheNight.Core
 
             float dismount = Math.Max(0f, _config.GetFloat("vehicles.dismountWeight", 3f));
             float huntEnemy = Math.Max(0f, _config.GetFloat("vehicles.huntEnemyWeight", 3f));
-            float huntPlayer = Math.Max(0f, _config.GetFloat("vehicles.huntPlayerWeight", 2f));
+            float huntPlayer = Math.Max(0f, _config.GetFloat("vehicles.huntPlayerWeight", 1f));
             float fleePlayer = Math.Max(0f, _config.GetFloat("vehicles.fleePlayerWeight", 2f));
+
+            // The weights are a per-driver decision and say nothing about how many drivers have
+            // already made it. Every car on the street rolling 20% independently is how a riot
+            // ends up with six of them converging on one pedestrian, which does not read as a
+            // riot at all - it reads as the traffic being out to get you.
+            if (huntPlayer > 0f && HuntingPlayerCount() >= Math.Max(0, _config.GetInt("vehicles.maxHuntingPlayer", 1)))
+            {
+                huntPlayer = 0f;
+            }
 
             float total = dismount + huntEnemy + huntPlayer + fleePlayer;
             if (total <= 0f) { return VehicleRole.Dismount; }
@@ -105,6 +122,7 @@ namespace TonightsTheNight.Core
 
             Ped player = Game.Player.Character;
             Ped target = role == VehicleRole.HuntEnemy && hostile != null && hostile.Exists() ? hostile : player;
+            bool afterPlayer = role == VehicleRole.HuntPlayer;
 
             try
             {
@@ -126,6 +144,18 @@ namespace TonightsTheNight.Core
                         _config.GetInt("vehicles.drivingStyle", 786603),
                         5f, 8f, true);
                 }
+                else if (afterPlayer)
+                {
+                    // Tail, do not drive at. A vehicle chase task against a target on foot is
+                    // resolved by driving over them, which is why standing on a pavement during
+                    // a riot used to mean being hit by a car every few seconds. Following keeps
+                    // the threat - they are behind you, and the passengers still lean out.
+                    Function.Call(Hash.TASK_VEHICLE_MISSION_PED_TARGET,
+                        ped, vehicle, player, _config.GetInt("vehicles.playerMission", 7),
+                        _config.GetFloat("vehicles.chaseSpeed", 55f),
+                        _config.GetInt("vehicles.drivingStyle", 786603),
+                        _config.GetFloat("vehicles.playerStandoff", 12f), 20f, true);
+                }
                 else
                 {
                     Function.Call(Hash.TASK_VEHICLE_CHASE, ped, target);
@@ -133,6 +163,7 @@ namespace TonightsTheNight.Core
                 }
 
                 Function.Call(Hash.SET_PED_KEEP_TASK, ped, true);
+                NoteHunting(ped, afterPlayer);
                 return true;
             }
             catch (Exception ex)
@@ -156,10 +187,53 @@ namespace TonightsTheNight.Core
             Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, ped, _config.GetFloat("vehicles.aggressiveness", 0.9f));
             Function.Call(Hash.SET_DRIVER_ABILITY, ped, _config.GetFloat("vehicles.driverAbility", 0.8f));
 
-            if (role != VehicleRole.FleePlayer && _config.GetBool("vehicles.driveThroughCrowds", true))
+            // Not when they are coming for you. "Stop steering around people" is what makes a
+            // driver plough through a crowd, and applied to the one driver whose target is a
+            // person it stops being atmosphere and becomes a car aimed at your back.
+            if (role != VehicleRole.FleePlayer && role != VehicleRole.HuntPlayer &&
+                _config.GetBool("vehicles.driveThroughCrowds", true))
             {
                 Function.Call(Hash.SET_PED_STEERS_AROUND_PEDS, ped, false);
             }
+        }
+
+        /// <summary>
+        /// Records that this driver is after the player, so the next one to roll for it can be
+        /// told the seat is taken. Assignments expire: a driver who has crashed, been killed or
+        /// simply lost you should not hold the slot for the rest of the riot.
+        /// </summary>
+        private void NoteHunting(Ped ped, bool hunting)
+        {
+            if (!hunting) { _huntingPlayer.Remove(ped.Handle); return; }
+
+            _huntingPlayer[ped.Handle] =
+                Game.GameTime + Math.Max(2000, _config.GetInt("vehicles.huntPlayerHoldMs", 20000));
+        }
+
+        private int HuntingPlayerCount()
+        {
+            if (_huntingPlayer.Count == 0) { return 0; }
+
+            List<int> stale = null;
+            int live = 0;
+
+            foreach (var pair in _huntingPlayer)
+            {
+                if (Game.GameTime > pair.Value)
+                {
+                    if (stale == null) { stale = new List<int>(); }
+                    stale.Add(pair.Key);
+                    continue;
+                }
+                live++;
+            }
+
+            if (stale != null)
+            {
+                foreach (int handle in stale) { _huntingPlayer.Remove(handle); }
+            }
+
+            return live;
         }
 
         /// <summary>

@@ -93,6 +93,73 @@ Every one of them is a config value rather than a constant. If rioters stand aro
 nothing, or helicopters park on a roof, that is a number in `defaults.json` and a reload rather
 than a new build.
 
+## Hostility has no size, so engagement is budgeted
+
+A relationship group is a set with no cardinality. "The army hates the player" is one fact, and
+it is true of every soldier in the district simultaneously — so the moment one of them could see
+you, all of them were individually in a combat task against you. That is correct as a model of
+hostility and wrong as a fight.
+
+`Attention` puts a ceiling on how many are engaging the player at once and sends the rest back to
+the targets they can see. It is deliberately a rotation rather than an amnesty: you are still
+hated, the ones sent away come back round later, and nothing about the relationship matrix
+changes. Hostility stays declarative; only the acting on it is rationed.
+
+The same argument applies to drivers, one level down. Each driver rolls independently for what to
+do about the riot, and a weight of "2 in 10 come after the player" says nothing about how many
+drivers have already rolled it. On a busy street that is four cars converging on you at once,
+which reads as the traffic being out to get you rather than as a riot. `VehicleTasking` counts
+its own assignments.
+
+## The pursuer is not invincible, it is illegible
+
+An unkillable pursuer has to be beatable or it is not a fight. Making its health very large only
+moves the problem: the player has no way to tell whether they are getting anywhere, so it reads
+as invincible whether or not it is.
+
+So the hunter's real health is pinned and meaningless, and damage is accounted separately into a
+Resolve pool at a fraction of its value — in whole during a stagger. Staggers are caused by what
+it does (the recovery after a rush, a slam, a phase change) rather than by anything the player
+can force directly, which turns the fight into a rhythm rather than a damage race. Two escape
+valves keep that fair: sustained damage fills a Break meter that staggers it independently, so
+accuracy alone is a route; and any single large hit is always worth more than its share, so
+explosives, vehicles and whatever a physics mod does all count.
+
+All of which is only legible because there is a bar on screen. The bar is not a convenience —
+without it the entire design reads as an invincible ped.
+
+## Contagion is a third supply line
+
+Every mode is fed by two things: converting the ambient crowd near the player, and spawning what
+has no ambient equivalent. Both are capped, so a riot rises to a level and stays there.
+
+Contagion is the third: a faction that grows by *reaching* people. Nothing is spawned and nothing
+is recruited from a radius around the player, so it spreads outward from where it started, thins
+where it is being killed, and gets worse the longer it is left. It is also the only mechanic here
+that can be contained by killing the right people rather than by changing a setting.
+
+## The navmesh is a preference, not a requirement
+
+`GET_SAFE_COORD_FOR_PED` answers "where is the nearest point a pedestrian could stand" by asking
+the pedestrian navmesh, which downtown is everywhere and in the desert, the hills, the docks and
+half of Blaine County is nowhere.
+
+Every caller that treated a zero return as "nothing arrives" therefore worked perfectly in the
+city and silently produced nothing at all outside it. `Ground` tries the navmesh, then the ground
+itself, then the nearest road. A soldier walking out of scrub is fine; no soldier is not.
+
+## Lists in config are sets, not preference orders
+
+`ModelResolver` has two lookups and the difference between them was a bug for a long time.
+`TryResolve` returns the first candidate the install has, which is right when the list is a
+preference order — the craft models, the hunter's models, a fallback chain. Every *spawn profile*
+in the mod is a set to draw from, and using the ordered lookup for those meant a faction
+declaring four vehicles always got whichever was written first: every armoured column was
+Rhinos, and every coastal patrol was the one marine model that is a man in a white t-shirt.
+
+`TryPick` draws at random from the resolvable candidates, and is used per ped rather than per
+wave so a squad of six is six people.
+
 ## What is checked without the game
 
 Nothing that calls a native can be tested outside GTA V. Everything else is, in CI:

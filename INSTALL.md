@@ -71,6 +71,65 @@ Press **F5** in game and the change applies without a restart. Settings resolve 
 each overriding the one below: live menu changes, then the running mode's own overrides, then
 `user.json`, then `defaults.json`.
 
+## If it is too hard, or not hard enough
+
+One slider first, before anything else: **Tuning → Intensity**. It scales every spawning
+faction's wave size, its ceiling and how often it arrives, all at once, across every mode. Turn
+it down if a mode is overwhelming you and up if nothing is happening.
+
+Three more in the same menu, in the order worth reaching for:
+
+| | |
+|---|---|
+| **How Many Can Fight You** | How many of them may be in a combat task against you at once. Everything else stays hostile and carries on fighting the people it can see. |
+| **Heavy Weapons** | The share of rockets, launchers, miniguns and machine guns that actually get handed out. A loadout weight is a share of a faction, not a rarity. |
+| **Cars Hunting You At Once** (Rioters Driving) | How many drivers may be coming after you. Defaults to one. |
+
+For **Tonight's The Night** specifically, the whole fight is on its own menu page: the Resolve
+pool is its length, *Damage While Armoured* is how much ordinary shooting is worth, and
+*Sustained Fire To Stagger* is how much punishment it takes to force an opening without
+explosives. Lowering that last one is the kindest single change you can make.
+
+## Building a loadout in the game
+
+**Weapons → Custom Loadout** lists every base-game weapon by category. Add one, give it a weight
+— four is four times as likely as one — and pick *Use This Loadout* to switch the preset to
+Custom. Ammunition, body armour and how many of them are armed at all are on the same page.
+
+A loadout lives in the live settings layer, so it lasts the session. **Save it to a profile slot**
+to keep it. It is the same setting a config file writes (`weapons.custom`), so a list built in
+the menu, one written by hand, and one loaded from a profile are all the same thing:
+
+```jsonc
+{
+  "weapons": {
+    "preset": "custom",
+    "custom": [ "WEAPON_BAT", { "name": "WEAPON_PISTOL", "weight": 0.25 } ],
+    "customArmour": 25,
+    "customAmmo": 120
+  }
+}
+```
+
+A weapon from an add-on pack can only be added by file — the picker only knows about base-game
+weapons, because it cannot know what a pack calls its own.
+
+## The two modes that are not riots
+
+**Tonight's The Night.** One thing on the map is coming for you. Its health is pinned and means
+nothing; damage goes into a separate Resolve pool at a fraction of its value, and in whole while
+it is staggered. Staggering it is a consequence of what it does rather than something you can
+force, so the fight is a rhythm: survive the ability, then punish the long recovery. Sustained
+damage fills a second meter that opens it up on its own, and a single large hit — a rocket, a
+car at speed — always counts for more than its share. Three phases, each transition a long and
+obvious opening. It follows you onto water and into the air.
+
+**Car Chase.** A price on your head that goes up. Waves are counted from your own body count
+rather than from a timer, so it escalates because you are winning. Chancers, then crews, then
+professionals, then contractors, then helicopters.
+
+Both are ordinary mode files in `modes/` and can be copied and edited like any other.
+
 ## Riot modes
 
 Each file in `modes/` is one mode: the factions in play, who hates whom, and any config that

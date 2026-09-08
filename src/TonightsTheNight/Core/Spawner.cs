@@ -87,10 +87,10 @@ namespace TonightsTheNight.Core
 
             // Losses shorten the gap between waves as well as widening them.
             float commitment = _reinforcements.Commitment(faction);
-            _nextWaveAt[faction.Id] = Game.GameTime + (int)(profile.WaveIntervalMs / commitment);
+            _nextWaveAt[faction.Id] = Game.GameTime + (int)(profile.WaveIntervalMs / (commitment * Intensity));
 
-            Model pedModel;
-            if (!_models.TryResolve(profile.Models, out pedModel) || !_models.Load(pedModel))
+            Model probe;
+            if (!_models.TryPick(profile.Models, _random, out probe))
             {
                 Log.Warn("Faction '" + faction.Id + "' has no usable ped model. Skipping its wave.");
                 return spawned;
@@ -104,30 +104,49 @@ namespace TonightsTheNight.Core
 
                 for (int i = 0; i < vehicles; i++)
                 {
-                    SpawnVehicleWave(faction, anchor, pedModel, spawned);
+                    SpawnVehicleWave(faction, anchor, spawned);
                 }
 
                 // Every vehicle failed to place - arrive on foot rather than not at all, unless
                 // arriving on foot would be absurd for this faction.
                 if (spawned.Count == 0 && profile.FootFallback)
                 {
-                    SpawnFootWave(faction, anchor, pedModel, spawned);
+                    SpawnFootWave(faction, anchor, spawned);
                 }
             }
             else
             {
-                SpawnFootWave(faction, anchor, pedModel, spawned);
+                SpawnFootWave(faction, anchor, spawned);
             }
 
             return spawned;
         }
 
-        /// <summary>How many arrive in one wave, after casualties are taken into account.</summary>
+        /// <summary>How many arrive in one wave, after casualties and intensity.</summary>
         private int WaveSizeFor(Faction faction)
         {
             float commitment = _reinforcements.Commitment(faction);
-            int size = (int)Math.Round(faction.Spawn.PerWave * commitment);
+            int size = (int)Math.Round(faction.Spawn.PerWave * commitment * Intensity);
             return size < 1 ? 1 : size;
+        }
+
+        /// <summary>
+        /// One number for "how much of this do I want", applied to every spawning faction's
+        /// wave size, ceiling and arrival rate.
+        ///
+        /// It exists because balance is not the same question for everybody. The invasion is
+        /// tuned to be survivable; somebody who wants to be overrun should be able to say so
+        /// without editing nine mode files, and somebody being overrun when they did not ask to
+        /// be should have one slider that fixes it rather than a spawn block per faction.
+        /// </summary>
+        private float Intensity
+        {
+            get
+            {
+                float value = _config.GetFloat("riot.intensity", 1f);
+                if (value < 0.1f) { return 0.1f; }
+                return value > 3f ? 3f : value;
+            }
         }
 
         /// <summary>
@@ -138,10 +157,13 @@ namespace TonightsTheNight.Core
         private int CapFor(Faction faction)
         {
             float commitment = _reinforcements.Commitment(faction);
-            return (int)Math.Round(faction.Spawn.MaxAlive * commitment);
+            int cap = (int)Math.Round(faction.Spawn.MaxAlive * commitment * Intensity);
+            // Intensity can be turned right down, but a faction that is enabled has to be able
+            // to put at least one member on the street or it reads as broken rather than quiet.
+            return cap < 1 ? 1 : cap;
         }
 
-        private void SpawnFootWave(Faction faction, Vector3 anchor, Model model, List<Ped> spawned)
+        private void SpawnFootWave(Faction faction, Vector3 anchor, List<Ped> spawned)
         {
             int size = WaveSizeFor(faction);
 
@@ -149,6 +171,9 @@ namespace TonightsTheNight.Core
             {
                 SpawnPoint point = PickPoint(anchor, faction.Spawn, false);
                 if (!point.Valid) { continue; }
+
+                Model model;
+                if (!NextPed(faction, out model)) { return; }
 
                 Ped ped = World.CreatePed(model, point.Position);
                 if (ped == null || !ped.Exists()) { continue; }
@@ -158,10 +183,23 @@ namespace TonightsTheNight.Core
             }
         }
 
-        private void SpawnVehicleWave(Faction faction, Vector3 anchor, Model pedModel, List<Ped> spawned)
+        /// <summary>
+        /// A model for the next member of this faction, drawn fresh each time.
+        ///
+        /// Per ped rather than per wave, so a squad of six is six people rather than one person
+        /// six times - which is what a wave looked like when the model was resolved once at the
+        /// top and handed down.
+        /// </summary>
+        private bool NextPed(Faction faction, out Model model)
+        {
+            if (!_models.TryPick(faction.Spawn.Models, _random, out model)) { return false; }
+            return _models.Load(model);
+        }
+
+        private void SpawnVehicleWave(Faction faction, Vector3 anchor, List<Ped> spawned)
         {
             Model vehicleModel;
-            if (!_models.TryResolve(faction.Spawn.Vehicles, out vehicleModel) || !_models.Load(vehicleModel))
+            if (!_models.TryPick(faction.Spawn.Vehicles, _random, out vehicleModel) || !_models.Load(vehicleModel))
             {
                 // No fallback here. This runs once per vehicle in the wave, so falling back to
                 // foot inside it spawned a full foot wave per vehicle - double or triple the
@@ -210,6 +248,9 @@ namespace TonightsTheNight.Core
 
             for (int seat = 0; seat < seats; seat++)
             {
+                Model pedModel;
+                if (!NextPed(faction, out pedModel)) { break; }
+
                 Ped ped = World.CreatePed(pedModel, point.Position);
                 if (ped == null || !ped.Exists()) { continue; }
 
@@ -419,12 +460,19 @@ namespace TonightsTheNight.Core
                 : new SpawnPoint { Position = street, Heading = 0f };
         }
 
+        /// <summary>
+        /// Somewhere to stand. The pedestrian navmesh first, then the bare ground.
+        ///
+        /// Only asking the navmesh is why quieter areas produced no arrivals at all: downtown
+        /// every candidate point is on it and out in Blaine County almost none are, so a wave
+        /// that worked perfectly in Vespucci silently spawned nobody in the desert.
+        /// </summary>
         private static SpawnPoint OnFoot(Vector3 candidate)
         {
-            Vector3 safe = World.GetSafeCoordForPed(candidate);
-            return safe == Vector3.Zero
+            Vector3 placed = Ground.Place(candidate);
+            return placed == Vector3.Zero
                 ? SpawnPoint.None
-                : new SpawnPoint { Position = safe, Heading = 0f };
+                : new SpawnPoint { Position = placed, Heading = 0f };
         }
     }
 }

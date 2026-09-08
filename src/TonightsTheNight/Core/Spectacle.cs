@@ -36,8 +36,23 @@ namespace TonightsTheNight.Core
         private readonly List<Barricade> _barricades = new List<Barricade>();
         private readonly List<int> _smoke = new List<int>();
 
+        /// <summary>
+        /// SET_ARTIFICIAL_LIGHTS_STATE_AFFECTS_VEHICLES. Absent from the SHVDN 3.6.0 enum this
+        /// is compiled against, so it goes in by hash — which is version-independent anyway.
+        /// </summary>
+        private const ulong ArtificialLightsAffectVehicles = 0xE18E628C1E2CFF7C;
+
         private List<Model> _props;
         private bool _blackedOut;
+        private bool _lightsOn = true;
+        private int _nextFlickerAt;
+
+        /// <summary>
+        /// Whether headlights are currently included, as the game has been told rather than as
+        /// the config reads. Applying it only on the transition into a blackout meant toggling
+        /// it mid-blackout did nothing until the power came back and went again.
+        /// </summary>
+        private bool _vehicleLightsAffected;
         private bool _ptfxRequested;
         private int _nextBarricadeAt;
         private int _nextSmokeAt;
@@ -131,22 +146,103 @@ namespace TonightsTheNight.Core
         /// The single largest change available for one native call. Street lights, shop signs and
         /// window light across the whole map go out; at night the difference is total.
         /// </summary>
-        private void UpdateBlackout(bool wanted)
+        /// <summary>
+        /// The power.
+        ///
+        /// <paramref name="phaseWants"/> is whether the riot has escalated far enough for the
+        /// mode to have asked for a blackout. That used to be the only question, which meant
+        /// the single largest thing this mod can do to the look of the city was reachable only
+        /// by playing three quarters of a mode that happens to declare it. "when" is a setting
+        /// now: never, once the mode asks, or from the moment it starts.
+        /// </summary>
+        private void UpdateBlackout(bool phaseWants)
         {
-            bool enabled = _config.GetBool("features.spectacle.blackout", true);
+            if (!_config.GetBool("features.spectacle.blackout", true)) { RestoreLights(); return; }
 
-            if (wanted && enabled && !_blackedOut)
+            string when = _config.GetString("features.spectacle.blackoutWhen", "phase");
+            bool wanted;
+
+            if (string.Equals(when, "always", StringComparison.OrdinalIgnoreCase)) { wanted = true; }
+            else if (string.Equals(when, "never", StringComparison.OrdinalIgnoreCase)) { wanted = false; }
+            else { wanted = phaseWants; }
+
+            if (!wanted) { RestoreLights(); return; }
+
+            if (!_blackedOut)
             {
-                // Street lights, shop signs and window light across the whole map. Headlights
-                // are unaffected, which is what keeps it readable rather than pitch black.
-                Function.Call(Hash.SET_ARTIFICIAL_LIGHTS_STATE, true);
                 _blackedOut = true;
+                _lightsOn = true;
+                _nextFlickerAt = 0;
+
                 GTA.UI.Notification.Show("~r~The power is out.");
-                Log.Info("Spectacle: blackout on.");
+                Log.Info("Spectacle: blackout on (" + when + ").");
+            }
+
+            ApplyVehicleLights();
+            Flicker();
+        }
+
+        /// <summary>
+        /// The grid coming back for a second and going again. Costs one native and is most of
+        /// the difference between "the lights are off" and "something is wrong with the city".
+        /// </summary>
+        private void Flicker()
+        {
+            if (!_config.GetBool("features.spectacle.blackoutFlicker", true))
+            {
+                SetLights(false);
                 return;
             }
 
-            if (!wanted || !enabled) { RestoreLights(); }
+            if (Game.GameTime < _nextFlickerAt) { return; }
+
+            bool turnOn = !_lightsOn;
+
+            // Short bursts of light, long stretches of dark. The asymmetry is the whole effect:
+            // an even blink reads as a broken script, a half-second of light every ten seconds
+            // reads as a substation losing the argument.
+            int hold = turnOn
+                ? _random.Next(120, 400)
+                : _config.GetInt("features.spectacle.blackoutFlickerMs", 9000) + _random.Next(0, 6000);
+
+            _nextFlickerAt = Game.GameTime + hold;
+            SetLights(turnOn);
+        }
+
+        /// <summary>
+        /// Headlights are a separate switch. Leaving them on is what keeps a blacked-out street
+        /// readable rather than pitch black, so it is off by default - and re-checked every pass
+        /// so the menu toggle takes effect while the power is already out.
+        /// </summary>
+        private void ApplyVehicleLights()
+        {
+            bool wanted = _config.GetBool("features.spectacle.blackoutVehicles", false);
+            if (wanted == _vehicleLightsAffected) { return; }
+
+            try
+            {
+                Function.Call((Hash)ArtificialLightsAffectVehicles, wanted);
+                _vehicleLightsAffected = wanted;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not set whether the blackout reaches vehicles", ex);
+            }
+        }
+
+        private void SetLights(bool on)
+        {
+            if (_lightsOn == on) { return; }
+
+            try
+            {
+                Function.Call(Hash.SET_ARTIFICIAL_LIGHTS_STATE, !on);
+                _lightsOn = on;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not switch the city lights", ex);
+            }
         }
 
         private void RestoreLights()
@@ -156,6 +252,7 @@ namespace TonightsTheNight.Core
             try
             {
                 Function.Call(Hash.SET_ARTIFICIAL_LIGHTS_STATE, false);
+                Function.Call((Hash)ArtificialLightsAffectVehicles, false);
                 Log.Info("Spectacle: blackout off.");
             }
             catch (Exception ex)
@@ -164,6 +261,8 @@ namespace TonightsTheNight.Core
             }
 
             _blackedOut = false;
+            _lightsOn = true;
+            _vehicleLightsAffected = false;
         }
 
         /// <summary>

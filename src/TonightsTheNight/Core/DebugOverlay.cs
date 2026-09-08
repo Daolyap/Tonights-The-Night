@@ -45,6 +45,17 @@ namespace TonightsTheNight.Core
                 {
                     sb.AppendLine("chases: " + director.Pursuit.ActiveChases + " (" + director.Pursuit.Started +
                                   " total)   looting: " + director.Looting.Active + " (" + director.Looting.Total + " total)");
+                    sb.AppendLine("engaging you: " + director.Attention.Engaged + "   sent elsewhere: " + director.Attention.Trimmed +
+                                  "   craft: " + director.Craft.Active +
+                                  (director.Contagion.Active ? "   infected: " + director.Contagion.Converted : "") +
+                                  (director.Manhunt.Active ? "   wave: " + director.Manhunt.Wave : ""));
+
+                    if (director.Hunter.Active)
+                    {
+                        sb.AppendLine("hunter: phase " + director.Hunter.Phase + "   resolve " +
+                                      (int)director.Hunter.Resolve + "/" + (int)director.Hunter.ResolveMax +
+                                      (director.Hunter.Vulnerable ? "   ~y~EXPOSED~s~" : ""));
+                    }
                 }
             }
 
