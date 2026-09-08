@@ -75,6 +75,16 @@ namespace TonightsTheNight.Core
         private HunterState _state = HunterState.Absent;
         private int _stateUntil;
         private int _nextAbilityAt;
+
+        /// <summary>
+        /// Separate from the ability cooldown on purpose.
+        ///
+        /// Sharing them meant a rush could never land: BeginRush sets the ability cooldown to
+        /// six and a half seconds ahead, the rush is over in one and a half, and the strike at
+        /// the end of it was checking the very timer the rush had just pushed out of reach.
+        /// </summary>
+        private int _nextStrikeAt;
+
         private int _nextCullAt;
         private int _nextTaskAt;
         private int _lastHealth;
@@ -194,6 +204,12 @@ namespace TonightsTheNight.Core
             _declared = JsonValue.Null;
             _vulnerableUntil = 0;
             _break = 0f;
+
+            // Reset here rather than only in Begin. Begin returns early for a mode that declares
+            // no hunter, so a win left this true for the rest of the session - and the Director
+            // stops the running mode the moment it sees it. Every mode started after beating
+            // Tonight's The Night ended on its first tick, announcing that you had survived it.
+            Defeated = false;
         }
 
         // ------------------------------------------------------------------ tick
@@ -456,7 +472,10 @@ namespace TonightsTheNight.Core
                 _fx.Burst(at, _config.GetString("features.hunter.fx.blink", "core/exp_grd_bzgas_smoke"), 2.5f);
                 _fx.Lightning();
                 _fx.Flash(_config.GetString("features.hunter.fx.deathEffect", "SwitchHUDIn"), 2000);
-                _fx.SlowTime(0.25f, 2200);
+                // No slow-motion here. Beating him ends the mode, and the mode ending tears this
+                // class down on the same frame - which restores the time scale immediately and
+                // turned a two-second beat into a stutter. The flash and the shake are instant
+                // and survive it.
                 _fx.Shake("LARGE_EXPLOSION_SHAKE", 0.8f);
                 _fx.StopScreenEffect();
 
@@ -500,7 +519,15 @@ namespace TonightsTheNight.Core
 
                 // Off a rooftop, on a parachute, or thirty metres up a crane: all the same
                 // problem, which is that the ground is not where he needs to be.
-                if (player.Position.Z - Ground.OnGround(player.Position).Z > 12f) { return Traversal.Air; }
+                //
+                // Only when the probe actually answered. Treating its "I do not know" as sea
+                // level made almost all of Los Santos read as a two-hundred-metre drop, and he
+                // spent entire modes flying.
+                float ground;
+                if (Ground.TryHeight(player.Position, out ground) && player.Position.Z - ground > 12f)
+                {
+                    return Traversal.Air;
+                }
             }
             catch (Exception)
             {
@@ -594,8 +621,8 @@ namespace TonightsTheNight.Core
 
         private void Maul(Ped player, Traversal traversal)
         {
-            if (Game.GameTime < _nextAbilityAt) { return; }
-            _nextAbilityAt = Game.GameTime + 1500;
+            if (Game.GameTime < _nextStrikeAt) { return; }
+            _nextStrikeAt = Game.GameTime + _config.GetInt("features.hunter.strikeIntervalMs", 1500);
 
             try
             {
@@ -709,8 +736,12 @@ namespace TonightsTheNight.Core
 
             float speed = _config.GetFloat("features.hunter.rushSpeed", 42f) * (0.85f + 0.15f * Phase);
             Vector3 next = here + direction / length * Math.Min(length, speed * delta);
-            next.Z = Ground.OnGround(next).Z + 1f;
-            if (next.Z < -100f) { next.Z = here.Z; }
+
+            // Keep his own height where the probe has nothing to say. Taking its zero as an
+            // answer dropped him to sea level mid-rush, which under most of the city is
+            // underground.
+            float ground;
+            next.Z = Ground.TryHeight(next, out ground) ? ground + 1f : here.Z;
 
             try
             {

@@ -46,6 +46,13 @@ namespace TonightsTheNight.Core
         private bool _blackedOut;
         private bool _lightsOn = true;
         private int _nextFlickerAt;
+
+        /// <summary>
+        /// Whether headlights are currently included, as the game has been told rather than as
+        /// the config reads. Applying it only on the transition into a blackout meant toggling
+        /// it mid-blackout did nothing until the power came back and went again.
+        /// </summary>
+        private bool _vehicleLightsAffected;
         private bool _ptfxRequested;
         private int _nextBarricadeAt;
         private int _nextSmokeAt;
@@ -167,22 +174,11 @@ namespace TonightsTheNight.Core
                 _lightsOn = true;
                 _nextFlickerAt = 0;
 
-                // Headlights are a separate switch. Leaving them on is what keeps a blacked-out
-                // street readable rather than pitch black, so it is off by default.
-                try
-                {
-                    Function.Call((Hash)ArtificialLightsAffectVehicles,
-                        _config.GetBool("features.spectacle.blackoutVehicles", false));
-                }
-                catch (Exception ex)
-                {
-                    Log.Error("Could not set whether the blackout reaches vehicles", ex);
-                }
-
                 GTA.UI.Notification.Show("~r~The power is out.");
                 Log.Info("Spectacle: blackout on (" + when + ").");
             }
 
+            ApplyVehicleLights();
             Flicker();
         }
 
@@ -211,6 +207,27 @@ namespace TonightsTheNight.Core
 
             _nextFlickerAt = Game.GameTime + hold;
             SetLights(turnOn);
+        }
+
+        /// <summary>
+        /// Headlights are a separate switch. Leaving them on is what keeps a blacked-out street
+        /// readable rather than pitch black, so it is off by default - and re-checked every pass
+        /// so the menu toggle takes effect while the power is already out.
+        /// </summary>
+        private void ApplyVehicleLights()
+        {
+            bool wanted = _config.GetBool("features.spectacle.blackoutVehicles", false);
+            if (wanted == _vehicleLightsAffected) { return; }
+
+            try
+            {
+                Function.Call((Hash)ArtificialLightsAffectVehicles, wanted);
+                _vehicleLightsAffected = wanted;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not set whether the blackout reaches vehicles", ex);
+            }
         }
 
         private void SetLights(bool on)
@@ -245,6 +262,7 @@ namespace TonightsTheNight.Core
 
             _blackedOut = false;
             _lightsOn = true;
+            _vehicleLightsAffected = false;
         }
 
         /// <summary>

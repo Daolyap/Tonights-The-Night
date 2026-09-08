@@ -617,6 +617,10 @@ namespace TonightsTheNight.Config
             hunter.Set("retaskMs", JsonValue.Of(1500));
             hunter.Set("meleeRange", JsonValue.Of(8));
             hunter.Set("strikeDamage", JsonValue.Of(45));
+            // How often it can land one. Separate from the ability cooldowns: sharing them
+            // meant a rush that connected could never actually hit anything, because the rush
+            // had just pushed that timer six seconds into the future.
+            hunter.Set("strikeIntervalMs", JsonValue.Of(1500));
             hunter.Set("vehicleDamage", JsonValue.Of(260));
             hunter.Set("flightSpeed", JsonValue.Of(26));
             hunter.Set("leashDistance", JsonValue.Of(220));

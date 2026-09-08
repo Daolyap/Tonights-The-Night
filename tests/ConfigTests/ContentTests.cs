@@ -143,6 +143,22 @@ public static class ContentTests
                   hunter[key].AsInt(0) + "ms");
         }
 
+        // Timing invariants. These are here because getting one wrong is silent: the ability
+        // still plays, it just never does anything, and there is no way to tell from watching.
+        Check("a rush finishes before another can start",
+              hunter["rushCooldownMs"].AsInt(0) > hunter["rushMs"].AsInt(0),
+              hunter["rushCooldownMs"].AsInt(0) + "ms cooldown vs " + hunter["rushMs"].AsInt(0) + "ms rush");
+
+        // A rush that connects lands a strike at the end of it. If the strike shared the
+        // ability cooldown - which it did - the rush that set that cooldown made its own strike
+        // impossible, and a lunge across fifty metres did nothing at all.
+        Check("a connecting rush can land a strike",
+              hunter["strikeIntervalMs"].AsInt(int.MaxValue) < hunter["rushCooldownMs"].AsInt(0),
+              "strike interval must be shorter than the rush cooldown");
+
+        Check("he recovers from a slam before he can slam again",
+              hunter["slamCooldownMs"].AsInt(0) > hunter["slamRecoveryMs"].AsInt(0));
+
         Check("the hunter can be escaped only so far", hunter["leashDistance"].AsInt(0) > 50);
         Check("the hunter's effects are declared as asset/effect",
               hunter["fx"]["trail"].AsString("").Contains("/"));

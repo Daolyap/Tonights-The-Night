@@ -49,6 +49,28 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
+        /// The height of the ground under a point, and whether the probe actually answered.
+        ///
+        /// Worth having as well as <see cref="OnGround"/> because that one reports failure as
+        /// Vector3.Zero, and a caller doing arithmetic on the result cannot tell the difference
+        /// between "no ground here" and "the ground is at sea level" - which around Los Santos
+        /// is most of the map reading as a two-hundred-metre drop.
+        /// </summary>
+        public static bool TryHeight(Vector3 candidate, out float height)
+        {
+            Vector3 placed = OnGround(candidate);
+
+            if (placed == Vector3.Zero)
+            {
+                height = 0f;
+                return false;
+            }
+
+            height = placed.Z;
+            return true;
+        }
+
+        /// <summary>
         /// The ground under a point, ignoring the navmesh entirely.
         ///
         /// Collision is requested first: the probe reads streamed geometry, so asking about
