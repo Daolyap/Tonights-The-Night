@@ -104,6 +104,16 @@ namespace TonightsTheNight.Core
         private Vector3 _rushTarget;
         private int _leashWarnedAt;
 
+        /// <summary>
+        /// Whether his collision is currently off, tracked rather than re-asserted.
+        ///
+        /// Three things switch it off - flight, a rush and a blink - and each of those has its
+        /// own way of ending. Flight does not: it ends because the player landed, which no code
+        /// path here was watching, so a hunter who had once followed you into the air walked
+        /// through walls and floors for the rest of the night.
+        /// </summary>
+        private bool _noClip;
+
         /// <summary>Raw damage since the last stagger. Fills the Break meter.</summary>
         private float _break;
 
@@ -361,6 +371,7 @@ namespace TonightsTheNight.Core
                 }
 
                 _fx.Attach(ped, _config.GetString("features.hunter.fx.trail", "core/exp_grd_bzgas_smoke"), 0.6f);
+                _noClip = false;
                 _state = HunterState.Stalking;
             }
             catch (Exception ex)
@@ -503,6 +514,20 @@ namespace TonightsTheNight.Core
 
         // ------------------------------------------------------------------ movement
 
+        /// <summary>The only thing that touches his collision, so it can never be left off.</summary>
+        private void Collision(bool on)
+        {
+            bool solid = !_noClip;
+            if (solid == on) { return; }
+
+            try
+            {
+                Function.Call(Hash.SET_ENTITY_COLLISION, _ped, on, on);
+                _noClip = !on;
+            }
+            catch (Exception) { }
+        }
+
         private Traversal TraversalFor(Ped player)
         {
             try
@@ -544,6 +569,10 @@ namespace TonightsTheNight.Core
                 Pursue(player, traversal);
                 return;
             }
+
+            // Back on the ground and back to being a solid object. Flight ends when the player
+            // lands rather than when he decides to stop, so this is the only place that notices.
+            Collision(true);
 
             float speed = SpeedFor();
 
@@ -602,9 +631,10 @@ namespace TonightsTheNight.Core
                 next.Z = SurfaceAt(next, here.Z);
             }
 
+            Collision(false);
+
             try
             {
-                Function.Call(Hash.SET_ENTITY_COLLISION, _ped, false, false);
                 Function.Call(Hash.SET_ENTITY_COORDS_NO_OFFSET, _ped, next.X, next.Y, next.Z, false, false, false);
                 Function.Call(Hash.SET_ENTITY_HEADING, _ped, Heading(step));
                 Function.Call(Hash.CLEAR_PED_TASKS, _ped);
@@ -647,6 +677,12 @@ namespace TonightsTheNight.Core
             }
         }
 
+        /// <summary>
+        /// The water surface at a point, or the ground where there is none.
+        ///
+        /// Both matter, because chasing somebody in a boat usually starts inland: holding his
+        /// last altitude across the beach put him inside the hill on the way.
+        /// </summary>
         private float SurfaceAt(Vector3 point, float fallback)
         {
             try
@@ -659,7 +695,8 @@ namespace TonightsTheNight.Core
             }
             catch (Exception) { }
 
-            return fallback;
+            float ground;
+            return Ground.TryHeight(point, out ground) ? ground + 1f : fallback;
         }
 
         // ------------------------------------------------------------------ abilities
@@ -706,13 +743,10 @@ namespace TonightsTheNight.Core
             _rushTarget = player.Position;
             _nextAbilityAt = Game.GameTime + Cooldown("features.hunter.rushCooldownMs", 6500);
 
-            try
-            {
-                Function.Call(Hash.CLEAR_PED_TASKS, _ped);
-                Function.Call(Hash.SET_ENTITY_COLLISION, _ped, false, false);
-            }
+            try { Function.Call(Hash.CLEAR_PED_TASKS, _ped); }
             catch (Exception) { }
 
+            Collision(false);
             _fx.MotionBlur(_ped, true);
             _fx.Sound("HUD_FRONTEND_DEFAULT_SOUNDSET", "Menu_Accept");
         }
@@ -755,9 +789,7 @@ namespace TonightsTheNight.Core
 
         private void EndRush(bool connected, Ped player)
         {
-            try { Function.Call(Hash.SET_ENTITY_COLLISION, _ped, true, true); }
-            catch (Exception) { }
-
+            Collision(true);
             _fx.MotionBlur(_ped, false);
 
             if (connected)
@@ -785,9 +817,10 @@ namespace TonightsTheNight.Core
             {
                 Function.Call(Hash.CLEAR_PED_TASKS, _ped);
                 Function.Call(Hash.SET_ENTITY_ALPHA, _ped, 60, false);
-                Function.Call(Hash.SET_ENTITY_COLLISION, _ped, false, false);
             }
             catch (Exception) { }
+
+            Collision(false);
 
             _fx.Burst(_ped.Position, _config.GetString("features.hunter.fx.blink", "core/exp_grd_bzgas_smoke"), 1.4f);
             _fx.Sound("HUD_FRONTEND_DEFAULT_SOUNDSET", "Menu_Accept");
@@ -802,10 +835,11 @@ namespace TonightsTheNight.Core
             if (arrival == Vector3.Zero) { arrival = Ground.OnGround(player.Position.Around(range * 0.5f)); }
             if (arrival == Vector3.Zero) { arrival = player.Position; }
 
+            Collision(true);
+
             try
             {
                 Function.Call(Hash.SET_ENTITY_COORDS_NO_OFFSET, _ped, arrival.X, arrival.Y, arrival.Z + 1f, false, false, false);
-                Function.Call(Hash.SET_ENTITY_COLLISION, _ped, true, true);
                 Function.Call(Hash.RESET_ENTITY_ALPHA, _ped);
                 Function.Call(Hash.SET_ENTITY_HEADING, _ped, Heading(player.Position - arrival));
             }
@@ -875,9 +909,10 @@ namespace TonightsTheNight.Core
             _stateUntil = Game.GameTime + durationMs;
             _vulnerableUntil = _stateUntil;
 
+            Collision(true);
+
             try
             {
-                Function.Call(Hash.SET_ENTITY_COLLISION, _ped, true, true);
                 Function.Call(Hash.RESET_ENTITY_ALPHA, _ped);
                 Function.Call(Hash.CLEAR_PED_TASKS, _ped);
                 Function.Call(Hash.SET_PED_MOVE_RATE_OVERRIDE, _ped, 0.4f);
@@ -907,13 +942,10 @@ namespace TonightsTheNight.Core
 
         private void Idle()
         {
-            try
-            {
-                Function.Call(Hash.CLEAR_PED_TASKS, _ped);
-                Function.Call(Hash.SET_ENTITY_COLLISION, _ped, true, true);
-            }
+            try { Function.Call(Hash.CLEAR_PED_TASKS, _ped); }
             catch (Exception) { }
 
+            Collision(true);
             _state = HunterState.Stalking;
         }
 
