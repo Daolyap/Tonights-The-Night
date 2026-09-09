@@ -85,9 +85,12 @@ namespace TonightsTheNight.Core
             _waveVehicles.Clear();
             SpawnProfile profile = faction.Spawn;
 
-            // Losses shorten the gap between waves as well as widening them.
+            // Losses shorten the gap between waves as well as widening them, and so does a
+            // player who is outrunning the last one: a wave interval written for somebody
+            // driving through a district is far too long for somebody crossing it.
             float commitment = _reinforcements.Commitment(faction);
-            _nextWaveAt[faction.Id] = Game.GameTime + (int)(profile.WaveIntervalMs / (commitment * Intensity));
+            float urgency = Interception.Urgency(_config);
+            _nextWaveAt[faction.Id] = Game.GameTime + (int)(profile.WaveIntervalMs / (commitment * Intensity * urgency));
 
             Model probe;
             if (!_models.TryPick(profile.Models, _random, out probe))
@@ -260,7 +263,13 @@ namespace TonightsTheNight.Core
                 spawned.Add(ped);
             }
 
-            if (spawned.Count > firstSeat) { _waveVehicles.Add(vehicle); }
+            if (spawned.Count > firstSeat)
+            {
+                // With somebody at the wheel, and only then: a rolling start given to an empty
+                // car is a driverless vehicle coasting down the road.
+                Interception.RollingStart(_config, vehicle);
+                _waveVehicles.Add(vehicle);
+            }
 
             if (spawned.Count == firstSeat)
             {
@@ -394,17 +403,29 @@ namespace TonightsTheNight.Core
             float minDistance = profile.MinDistance * scale;
             float span = Math.Max(1f, profile.MaxDistance * scale - minDistance);
 
+            // Measured from where a moving player is going rather than from where they are, so a
+            // wave that takes a moment to place still lands near their road. Only for road
+            // arrivals, and never far enough to push an arrival onto their bumper.
+            Vector3 origin = onRoad
+                ? Interception.Anchor(_config, anchor, minDistance * 0.7f)
+                : anchor;
+
             SpawnPoint fallback = SpawnPoint.None;
 
             for (int attempt = 0; attempt < attempts; attempt++)
             {
-                double angle = _random.NextDouble() * Math.PI * 2.0;
+                // Mostly behind a moving player, on the line they are actually travelling,
+                // rather than anywhere on a circle. A bearing picked at random is fine for a
+                // riot and useless for a chase: at speed, three arrivals in four were placed
+                // somewhere the player had already gone past or was never going to reach.
+                double angle = onRoad ? Interception.Bearing(_config, _random)
+                                      : _random.NextDouble() * Math.PI * 2.0;
                 float distance = minDistance + (float)_random.NextDouble() * span;
 
                 var candidate = new Vector3(
-                    anchor.X + (float)Math.Cos(angle) * distance,
-                    anchor.Y + (float)Math.Sin(angle) * distance,
-                    anchor.Z);
+                    origin.X + (float)Math.Cos(angle) * distance,
+                    origin.Y + (float)Math.Sin(angle) * distance,
+                    origin.Z);
 
                 SpawnPoint placed = onRoad ? OnRoad(candidate) : OnFoot(candidate);
                 if (!placed.Valid) { continue; }

@@ -132,6 +132,11 @@ namespace TonightsTheNight.Core
             {
                 if (vehicle == null || !vehicle.Exists()) { return; }
 
+                // Whatever engine the chase code gave it goes back with it. A car handed to the
+                // population manager with a doubled power multiplier is traffic that behaves
+                // strangely for the rest of the session, in a way nobody would ever trace here.
+                Function.Call(Hash.SET_VEHICLE_CHEAT_POWER_INCREASE, vehicle, 1f);
+
                 vehicle.IsPersistent = false;
                 vehicle.MarkAsNoLongerNeeded();
             }

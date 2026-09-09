@@ -248,19 +248,64 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
-        /// A non-damaging explosion, used purely for the shove. The hunter's own damage is
-        /// applied by hand so it cannot be turned into a stray kill on somebody's save.
+        /// A ring on the ground, drawn for one frame.
+        ///
+        /// This is the telegraph. Every heavy move he has now spends a moment winding up with
+        /// one of these under it, which is the whole difference between an attack you dodge and
+        /// an attack that simply happens to you.
         /// </summary>
-        public void Shockwave(Vector3 at, float scale)
+        public void Ring(Vector3 at, float radius, int red, int green, int blue, int alpha)
         {
             try
             {
-                Function.Call(Hash.ADD_EXPLOSION, at.X, at.Y, at.Z,
-                    _config.GetInt("features.hunter.fx.slamExplosion", 4), 0f, true, false, scale);
+                // Marker 1 is the flat cylinder. Deliberately shallow: it is a mark on the road,
+                // not a column of light.
+                Function.Call(Hash.DRAW_MARKER, 1,
+                    at.X, at.Y, at.Z - 0.95f,
+                    0f, 0f, 0f,
+                    0f, 0f, 0f,
+                    radius * 2f, radius * 2f, 0.35f,
+                    red, green, blue, alpha,
+                    false, false, 2, false, 0, 0, false);
+            }
+            catch (Exception)
+            {
+                // A telegraph that does not draw is a harder fight, not a broken one.
+            }
+        }
+
+        /// <summary>
+        /// A shove, applied by hand to one entity.
+        ///
+        /// Replaces the explosion this used to raise. <c>ADD_EXPLOSION</c> was being asked for
+        /// zero damage and got it, but an explosion is still an explosion: it was visible - the
+        /// fireball in every screenshot - it set bystanders alight, and its impulse is applied to
+        /// everything in radius including whoever raised it. So the boss knocked himself down
+        /// with his own ground slam, roughly every eight seconds, for the entire fight.
+        ///
+        /// A force applied to a named entity cannot do that. It also lets the shove be aimed,
+        /// which an explosion never could.
+        /// </summary>
+        /// <param name="strength">
+        /// Roughly the change in velocity it imparts, in metres per second: the force is applied
+        /// as a mass-relative impulse, so a ped and a saloon are moved comparably by the same
+        /// number. "Roughly" because the flag arguments below are community-documented rather
+        /// than official, which is exactly why every caller reads its number from config.
+        /// </param>
+        public void Shove(Entity entity, Vector3 direction, float strength)
+        {
+            if (entity == null || !entity.Exists()) { return; }
+
+            try
+            {
+                // Type 1 is an impulse at the centre of mass, which is what a shove is.
+                Function.Call(Hash.APPLY_FORCE_TO_ENTITY, entity, 1,
+                    direction.X * strength, direction.Y * strength, direction.Z * strength,
+                    0f, 0f, 0f, 0, false, true, true, false, true);
             }
             catch (Exception ex)
             {
-                Log.Error("Could not raise a shockwave", ex);
+                Log.Error("Could not shove an entity", ex);
             }
         }
 
