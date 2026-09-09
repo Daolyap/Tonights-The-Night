@@ -44,6 +44,10 @@ public static class ContentTests
         CheckMeleePreset();
         CheckCarryProps(defaults);
         CheckHunterDefaults(defaults);
+        CheckHunterMoveset(defaults);
+        CheckContagionDefaults(defaults);
+        CheckInterceptionDefaults(defaults);
+        CheckOutbreakIsNotAGunfight();
         CheckMenuDefaults(defaults);
 
         Console.WriteLine();
@@ -162,6 +166,188 @@ public static class ContentTests
         Check("the hunter can be escaped only so far", hunter["leashDistance"].AsInt(0) > 50);
         Check("the hunter's effects are declared as asset/effect",
               hunter["fx"]["trail"].AsString("").Contains("/"));
+    }
+
+    /// <summary>
+    /// The move set, and the promise it makes.
+    ///
+    /// Every heavy move the hunter has is supposed to be announced before it lands and to cost
+    /// him an opening afterwards. Both halves are silent when they are wrong: a windup of zero
+    /// is an attack that simply happens to you, and a recovery shorter than the time it takes to
+    /// aim is an opening that only exists on paper. Neither is visible from watching one fight.
+    /// </summary>
+    private static void CheckHunterMoveset(JsonValue defaults)
+    {
+        JsonValue hunter = defaults["features"]["hunter"];
+
+        foreach (string key in new[] { "rushWindupMs", "slamWindupMs", "cleaveWindupMs", "hurlWindupMs" })
+        {
+            // Long enough to see and react to from a standing start. Below about a third of a
+            // second nobody is dodging anything; they are being told what killed them.
+            Check("hunter." + key + " is long enough to read", hunter[key].AsInt(0) >= 350,
+                  hunter[key].AsInt(0) + "ms");
+        }
+
+        foreach (string key in new[] { "cleaveRecoveryMs", "hurlRecoveryMs", "rushWhiffRecoveryMs" })
+        {
+            Check("hunter." + key + " is a usable window", hunter[key].AsInt(0) >= 1000,
+                  hunter[key].AsInt(0) + "ms");
+        }
+
+        // The asymmetry that makes reading the tell worth anything. If a miss cost him no more
+        // than a hit, dodging would only ever be worth the damage it avoided and the fight would
+        // have no forward motion.
+        Check("missing costs him more than connecting",
+              hunter["rushWhiffRecoveryMs"].AsInt(0) > hunter["rushRecoveryMs"].AsInt(0),
+              hunter["rushWhiffRecoveryMs"].AsInt(0) + "ms vs " + hunter["rushRecoveryMs"].AsInt(0) + "ms");
+
+        // Same invariant the rush and the slam already hold: a move whose cooldown is shorter
+        // than its own recovery can be started again before he has finished paying for it.
+        Check("he recovers from a cleave before he can cleave again",
+              hunter["cleaveCooldownMs"].AsInt(0) > hunter["cleaveRecoveryMs"].AsInt(0));
+        Check("he recovers from a throw before he can throw again",
+              hunter["hurlCooldownMs"].AsInt(0) > hunter["hurlRecoveryMs"].AsInt(0));
+
+        // The charge steers; it does not track. A rate high enough to re-aim inside a frame is
+        // the undodgeable behaviour this replaced, written as a number instead of a loop.
+        double steer = hunter["rushSteerRate"].AsDouble(0);
+        Check("the charge steers rather than tracks", steer > 0 && steer <= 3, steer.ToString());
+
+        // Held back a phase, so the first third of the fight is a plain melee fight the tells
+        // can be learned in.
+        Check("the thrown attack is not in the opening phase", hunter["hurlFromPhase"].AsInt(0) >= 2);
+        Check("he has something to throw", hunter["debris"].Count > 0);
+
+        // Nothing he does may be an explosion. An explosion applies its impulse to whoever
+        // raised it, which is how he spent the fight lying next to his own ground slam.
+        //
+        // The call, not the word: both files explain in prose why the native is gone, and a
+        // check that cannot tell a comment from a call would forbid saying so.
+        Check("the hunter raises no explosions",
+              !SourceOf("Core", "Hunter.cs").Contains("Hash.ADD_EXPLOSION") &&
+              !SourceOf("Core", "HunterFx.cs").Contains("Hash.ADD_EXPLOSION"),
+              "a zero-damage explosion still knocks him over");
+    }
+
+    /// <summary>
+    /// The epidemic underneath the visible spread.
+    ///
+    /// Its whole job is to be true while nobody is looking, which means none of it can be
+    /// checked by playing for thirty seconds. A growth rate of zero, a front that does not move
+    /// or a suppression that can reach the ceiling all produce the same symptom the layer was
+    /// added to fix: drive away and the outbreak is over.
+    /// </summary>
+    private static void CheckContagionDefaults(JsonValue defaults)
+    {
+        JsonValue contagion = defaults["features"]["contagion"];
+
+        double start = contagion["startingPrevalence"].AsDouble(0);
+        double ceiling = contagion["maxPrevalence"].AsDouble(0);
+
+        Check("the outbreak starts somewhere above nothing", start > 0, start.ToString());
+        Check("the outbreak starts below its ceiling", start < ceiling, start + " vs " + ceiling);
+        Check("the outbreak grows on its own", contagion["growthPerSecond"].AsDouble(0) > 0);
+        Check("the front moves without being watched", contagion["frontMetresPerSecond"].AsDouble(0) > 0);
+        Check("the front starts wide enough to be an outbreak", contagion["startingFront"].AsDouble(0) > 0);
+
+        // The rim carries a share of the core, or the outbreak has a boundary you can stand
+        // astride rather than an edge.
+        double rim = contagion["edgeShare"].AsDouble(0);
+        Check("the outbreak has an edge rather than a boundary", rim > 0 && rim < 1, rim.ToString());
+
+        // Containment is local and partial by design. Suppression that could reach the core
+        // prevalence would let a few kills in one street clear the district.
+        Check("containment cannot cancel the outbreak",
+              contagion["maxSuppression"].AsDouble(1) < ceiling,
+              contagion["maxSuppression"].AsDouble(1) + " vs a ceiling of " + ceiling);
+        Check("containment wears off", contagion["clearMs"].AsInt(0) > 0);
+        Check("the count is on screen", contagion["showCount"].AsBool(false));
+    }
+
+    /// <summary>
+    /// The numbers that decide whether a chase survives a motorway. Every one of them is inert
+    /// below the threshold, so a threshold of zero would apply the whole thing to somebody
+    /// walking - and a boost ceiling below one would make chase cars slower than standard.
+    /// </summary>
+    private static void CheckInterceptionDefaults(JsonValue defaults)
+    {
+        JsonValue interception = defaults["features"]["interception"];
+
+        Check("interception ships enabled", interception["enabled"].AsBool(false));
+        Check("it only applies above a real speed", interception["speedThreshold"].AsDouble(0) > 5,
+              interception["speedThreshold"].AsDouble(0) + " m/s");
+        Check("arrivals are led, not lagged", interception["leadSeconds"].AsDouble(0) > 0);
+        Check("the lead is capped", interception["maxLead"].AsDouble(0) > 0);
+
+        double behind = interception["behindShare"].AsDouble(0);
+        Check("most arrivals come from behind", behind > 0.5 && behind < 1,
+              behind + " - at 1 the road ahead is guaranteed safe");
+
+        // The one that actually fixes it. A car created stationary behind somebody at speed
+        // spends its first seconds losing ground and never gets them back.
+        double rolling = interception["rollingStart"].AsDouble(0);
+        Check("arrivals are already moving", rolling > 0.5 && rolling <= 1.2, rolling.ToString());
+
+        Check("a chase car is never slower than standard", interception["maxBoost"].AsDouble(0) >= 1);
+        Check("the boost has somewhere to go", interception["boostGain"].AsDouble(0) > 0);
+        Check("drivers aim to close the gap, not match it", interception["cruiseMargin"].AsDouble(0) > 1);
+        Check("urgency never slows anything down", interception["maxUrgency"].AsDouble(0) >= 1);
+    }
+
+    /// <summary>
+    /// Patient Zero is supposed to be an outbreak, and it read as two crowds having a firefight.
+    ///
+    /// Half of that was the loadout and half was that conversion only ever added a weapon, so an
+    /// ambient pedestrian who was already carrying kept it. Both halves are content decisions
+    /// that look right in a diff and are wrong in the street, so they are asserted rather than
+    /// remembered.
+    /// </summary>
+    private static void CheckOutbreakIsNotAGunfight()
+    {
+        JsonValue mode;
+        string error;
+
+        if (!JsonValue.TryParse(StockModeTests.ExtractModes()["contagion"], out mode, out error))
+        {
+            Check("the outbreak mode parses", false, error);
+            return;
+        }
+
+        JsonValue infected = mode["factions"]["infected"];
+        JsonValue people = mode["factions"]["public"];
+
+        Check("the infected are unarmed", infected["armedChance"].AsDouble(1) <= 0,
+              "an infected with a pistol is a person with a gun");
+        Check("the infected give up what they were carrying", infected["disarm"].AsBool(false),
+              "conversion only ever added a weapon, so they kept their own");
+
+        foreach (JsonValue weapon in people["weapons"].Items)
+        {
+            string name = weapon["name"].AsString(weapon.AsString(null));
+            Check("the uninfected carry no firearm: '" + name + "'",
+                  name != null && Melee.Contains(Normalise(name)),
+                  "a crowd with pistols turns the outbreak into a gunfight");
+        }
+
+        // A handful stand and swing; the rest run. The cordon is the side with rifles, and it
+        // arrives later, which is what makes it read as the army rather than as more crowd.
+        Check("most of the uninfected run", people["fightBackChance"].AsDouble(1) <= 0.2,
+              people["fightBackChance"].AsDouble(1).ToString());
+        Check("the cordon is the only side with firearms",
+              mode["factions"]["cordon"]["armedChance"].AsDouble(0) > 0.9);
+    }
+
+    /// <summary>Config accepts "Bat" and "WEAPON_BAT"; the melee list is written the long way.</summary>
+    private static string Normalise(string weapon)
+    {
+        return weapon.StartsWith("WEAPON_", StringComparison.OrdinalIgnoreCase)
+            ? weapon.ToUpperInvariant()
+            : "WEAPON_" + weapon.ToUpperInvariant();
+    }
+
+    private static string SourceOf(string folder, string file)
+    {
+        return File.ReadAllText(Path.Combine(RepoRoot(), "src", "TonightsTheNight", folder, file));
     }
 
     /// <summary>

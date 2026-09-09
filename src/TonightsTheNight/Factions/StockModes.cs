@@ -862,7 +862,7 @@ namespace TonightsTheNight.Factions
   ""_stock"": true,
   ""name"": ""Tonight's The Night"",
   ""order"": 15,
-  ""description"": ""One thing on the map is coming for you. It is faster than you, it does not stop, and there is nowhere it cannot follow."",
+  ""description"": ""One thing on the map is coming for you. It is faster than you, it does not stop, and there is nowhere it cannot follow. Everything it does is announced a moment before it lands; nothing it does can be walked off."",
   ""enabled"": true,
 
   // Not the crowd's problem and not the police's. This mode is one fight, and everything else
@@ -873,6 +873,12 @@ namespace TonightsTheNight.Factions
   // at a fraction of its value, in whole while it is staggered, and staggering it is a
   // consequence of what it does rather than something you can force. Survive the ability,
   // punish the recovery. Every number is in features.hunter and can be reloaded live.
+  //
+  // Four heavy moves, all of them announced. A charge that commits to the line it launched on,
+  // so stepping off it works and missing costs it more than connecting does; a ground strike
+  // you get out of; a swing you get behind; and something out of the street thrown at your head
+  // once it has been hurt. Between them it hits with its hands. Nothing it does is an explosion
+  // - which is why it no longer spends the fight lying next to one of its own.
   ""hunter"": {
     ""enabled"": true,
     ""name"": ""The Night"",
@@ -880,6 +886,8 @@ namespace TonightsTheNight.Factions
     // is the intent: armoured, faceless and far too large. Point this at an add-on model if you
     // have something better.
     ""models"": [ ""u_m_y_juggernaut_01"", ""s_m_y_blackops_03"", ""s_m_y_blackops_01"", ""s_m_m_highsec_01"" ],
+    // Resolved the same way. What it picks up off the street to throw at you.
+    ""debris"": [ ""prop_barrel_02a"", ""prop_bin_01a"", ""prop_rub_wheel_01"", ""prop_roadcone02a"" ],
     ""resolve"": 2400,
     ""health"": 5000,
     ""weapon"": ""WEAPON_MACHETE"",
@@ -937,6 +945,10 @@ namespace TonightsTheNight.Factions
   ""config"": {
     ""riot"": { ""conversionChance"": 0.5 },
     ""combat"": { ""accuracy"": 15 },
+    // A busy street, because it is not only after you. Anything meaningfully closer to it than
+    // you are is a detour it takes, and those few seconds are the only breathing room the mode
+    // has - so there has to be somebody there for it to take them on.
+    ""density"": { ""pedMultiplier"": 1.8, ""vehicleMultiplier"": 1.0 },
     // Nothing else in the street should be competing for your attention.
     ""features"": {
       ""pursuit"": { ""enabled"": false },
@@ -1090,7 +1102,7 @@ namespace TonightsTheNight.Factions
   // Infected and uninfected are both pedestrians, and the whole mode is one turning into the
   // other. Saying so keeps the build from treating it as the Martial Law bug.
   ""crowdFightsItself"": true,
-  ""description"": ""It spreads by reaching people. Kill the right ones and it stops; leave it and the district is gone."",
+  ""description"": ""It spreads by reaching people, and it keeps spreading whether or not you are there to watch. Hold a street; you will not hold the district."",
   ""enabled"": true,
   ""playerRelationship"": ""hate"",
 
@@ -1098,6 +1110,11 @@ namespace TonightsTheNight.Factions
   // spawning; this one grows where its members physically are, so it moves outward, thins where
   // it is being killed, and gets worse the longer it is left. It is the only thing here that
   // can be contained by killing the right people rather than by a setting.
+  //
+  // Under the contact spread there is an epidemic on the clock - an origin, a widening front,
+  // and a prevalence curve - and anybody the riot takes over inside that front may already have
+  // it. That is what stops driving away from working: the outbreak does not pause because it is
+  // off screen, and the street you cleared an hour ago is not the street you left.
   ""contagion"": {
     ""enabled"": true,
     ""source"": ""infected"",
@@ -1107,7 +1124,15 @@ namespace TonightsTheNight.Factions
     ""intervalMs"": 1100,
     ""perPass"": 3,
     ""samplesPerPass"": 20,
-    ""max"": 0
+    ""max"": 0,
+
+    // The unwatched half. Every one of these has a default in features.contagion; they are
+    // written out here because this is the mode they are for and the curve is the mode.
+    ""startingPrevalence"": 0.03,
+    ""startingFront"": 140,
+    ""growthPerSecond"": 0.012,
+    ""maxPrevalence"": 0.9,
+    ""frontMetresPerSecond"": 7
   },
 
   ""escalation"": {
@@ -1122,27 +1147,40 @@ namespace TonightsTheNight.Factions
     // A handful to start it. Everything after this is spread rather than recruited, which is
     // why the share is so low - if this recruited at any real rate the contagion would be
     // decoration on top of an ordinary riot.
+    // Nothing. No knife, no hammer, and - because conversion never used to take anything away -
+    // not the pistol they happened to be carrying before this started either. That last one is
+    // why the street read as two crowds having a firefight instead of as an outbreak: an
+    // infected who keeps their gun is not an infected, it is a person with a gun.
+    //
+    // Harder to put down than a pedestrian, because a thing that walks at you with its hands is
+    // only frightening if walking at you works.
     ""infected"": {
       ""name"": ""Infected"", ""reaction"": ""Fight"", ""recruits"": ""civilian"", ""share"": 0.05,
       ""playerRelationship"": ""hate"",
-      ""armedChance"": 0.15, ""ammo"": 40, ""health"": 160, ""accuracy"": 5,
-      ""weapons"": [ { ""name"": ""Knife"", ""weight"": 2 }, { ""name"": ""Hammer"", ""weight"": 1 } ],
+      ""armedChance"": 0, ""disarm"": true, ""health"": 220, ""accuracy"": 0,
+      ""weapons"": [ { ""name"": ""Unarmed"", ""weight"": 1 } ],
       ""blip"": { ""enabled"": true, ""sprite"": ""Standard"", ""colour"": ""GreenDark"" }
     },
 
+    // People, mostly running. A handful swing something at whatever is coming for them, and
+    // that is the ceiling: an armed civilian population turns the mode into a gunfight between
+    // two crowds, which is a fine thing for a riot mode to be and the wrong thing for this one.
+    // The people with rifles are the cordon, and they arrive later, on purpose.
     ""public"": {
-      ""name"": ""Uninfected"", ""reaction"": ""Mixed"", ""fightBackChance"": 0.3,
+      ""name"": ""Uninfected"", ""reaction"": ""Mixed"", ""fightBackChance"": 0.12,
       ""recruits"": ""civilian"", ""share"": 4,
       ""playerRelationship"": ""neutral"",
-      ""armedChance"": 0.3, ""ammo"": 80,
+      ""armedChance"": 0.12, ""disarm"": true, ""ammo"": 0,
       ""weapons"": [
         { ""name"": ""Bat"", ""weight"": 3 }, { ""name"": ""Crowbar"", ""weight"": 2 },
-        { ""name"": ""Pistol"", ""weight"": 2 }, { ""name"": ""PumpShotgun"", ""weight"": 1 }
+        { ""name"": ""Bottle"", ""weight"": 2 }, { ""name"": ""GolfClub"", ""weight"": 1 }
       ],
       ""blip"": { ""enabled"": false }
     },
 
-    // They are not here to help anybody. Everything inside the line is a risk, including you.
+    // The only people here with firearms, which is what makes them read as the army arriving
+    // rather than as more of the crowd. They are not here to help anybody: everything inside the
+    // line is a risk, including you.
     ""cordon"": {
       ""name"": ""Cordon"", ""reaction"": ""Fight"", ""recruits"": ""none"", ""share"": 1, ""fromPhase"": 2,
       ""playerRelationship"": ""hate"",

@@ -366,6 +366,13 @@ namespace TonightsTheNight.Core
                 // times a second into a sixty-frame-a-second game flickers.
                 _manhunt.Update(Kills, _registry.Count);
 
+                // The outbreak keeps its own time. Deliberately outside the work throttle and
+                // outside the Paused check: an epidemic that stops spreading while you read a
+                // menu, or while you are four blocks away, is not an epidemic - it is a set
+                // piece that only happens where you are looking.
+                _contagion.Advance(Zone.Centre);
+                _contagion.Draw();
+
                 if (NoteDeath()) { return; }
 
                 _perception.Update(_registry.Tracked);
@@ -514,18 +521,38 @@ namespace TonightsTheNight.Core
                 // means they immediately shoot each other, which reads as a bug rather than as
                 // a riot. Vehicle mates inherit the faction of whoever was recruited first.
                 Faction faction = FactionOfVehicleMates(ped);
+                bool seeded = false;
 
                 if (faction == null)
                 {
-                    // Round-robin over the share-weighted pool: predictable proportions, and
-                    // no risk of one side being randomly outnumbered in a way that reads as a bug.
-                    faction = _recruitPool[_recruitRotation++ % _recruitPool.Count];
+                    // The outbreak gets first refusal on anybody standing inside it.
+                    //
+                    // This is what makes an infection behave like one. Contact spread only ever
+                    // reached the couple of hundred metres the tracked list covers, so driving
+                    // away ended the outbreak and driving back found the district clean. Now the
+                    // epidemic runs on the clock underneath, and the crowd you meet is a sample
+                    // of a city that has it - so leaving buys you time and nothing else.
+                    Faction carrier = _contagion.Carrier(ActiveMode);
+
+                    // The carrier's own recruit filter is asked first. Skipping it would let the
+                    // outbreak claim somebody it is not allowed to have, and the filter check
+                    // below would then drop that ped entirely rather than handing them back to
+                    // the pool - so a soldier standing in an infected street joined nothing.
+                    if (carrier != null && Escalation.Allows(carrier.FromPhase) &&
+                        Accepts(carrier, ped) && _contagion.IsAlreadyInfected(ped.Position))
+                    {
+                        faction = carrier;
+                        seeded = true;
+                    }
+                    else
+                    {
+                        // Round-robin over the share-weighted pool: predictable proportions, and
+                        // no risk of one side being randomly outnumbered in a way that reads as a bug.
+                        faction = _recruitPool[_recruitRotation++ % _recruitPool.Count];
+                    }
                 }
 
-                if (!string.Equals(faction.Recruits, "any", StringComparison.OrdinalIgnoreCase) && !MatchesFilter(ped, faction.Recruits))
-                {
-                    continue;
-                }
+                if (!Accepts(faction, ped)) { continue; }
 
                 Reaction reaction = faction.ResolveReaction(_random);
                 TrackedPed entry = _registry.Add(ped, faction, reaction, false);
@@ -545,6 +572,8 @@ namespace TonightsTheNight.Core
                 if (reaction == Reaction.Fight) { _lastFighter = ped; }
 
                 AttachBlip(entry);
+
+                if (seeded) { _contagion.NoteSeeded(); }
 
                 converted++;
                 RecruitedTotal++;
@@ -942,6 +971,13 @@ namespace TonightsTheNight.Core
             }
         }
 
+        /// <summary>Whether a faction will take this pedestrian at all.</summary>
+        private static bool Accepts(Faction faction, Ped ped)
+        {
+            return string.Equals(faction.Recruits, "any", StringComparison.OrdinalIgnoreCase) ||
+                   MatchesFilter(ped, faction.Recruits);
+        }
+
         /// <summary>
         /// Round-robins over the tracked list: prunes the dead, releases anyone who has wandered
         /// out of range, and re-tasks idle fighters. Only <see cref="_budget"/> peds per tick.
@@ -980,6 +1016,14 @@ namespace TonightsTheNight.Core
                     if (entry.Ped != null && entry.Ped.Exists() && entry.Ped.IsDead)
                     {
                         Kills++;
+
+                        // Containment is local and temporary, which is the only honest version
+                        // of it: clearing a street buys that street a while, and buys the county
+                        // nothing at all.
+                        if (_contagion.IsCarrier(ActiveMode, entry.Faction))
+                        {
+                            _contagion.NoteSuppressed(entry.Ped.Position);
+                        }
 
                         // Only spawned members count: converting a pedestrian and losing them
                         // is the riot working, not a faction taking casualties.

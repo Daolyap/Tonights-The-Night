@@ -247,6 +247,13 @@ namespace TonightsTheNight.Core
             Vehicle vehicle = FindRide(lead, player, out commandeered);
             if (vehicle == null) { return null; }
 
+            // Boarding on foot is what a mob looks like, and it costs seven seconds. Seven
+            // seconds is nothing when the player is stuck in traffic and about four hundred
+            // metres when they are not - the chase formed, spent its whole patience watching
+            // four people jog to a car, and gave up on its first update for being too far away.
+            // So at speed they are already in it.
+            bool hot = Interception.Running(_config);
+
             var chase = new Chase
             {
                 Faction = lead.Faction,
@@ -254,7 +261,7 @@ namespace TonightsTheNight.Core
                 Commandeered = commandeered,
                 StartedAt = Game.GameTime,
                 LastCloseAt = Game.GameTime,
-                BoardBy = Game.GameTime + _config.GetInt("features.pursuit.boardTimeoutMs", 7000)
+                BoardBy = hot ? Game.GameTime : Game.GameTime + _config.GetInt("features.pursuit.boardTimeoutMs", 7000)
             };
 
             AddToCrew(chase, lead, -1);
@@ -432,7 +439,12 @@ namespace TonightsTheNight.Core
             }
 
             float distance = player.Position.DistanceTo(chase.Vehicle.Position);
-            float giveUp = _config.GetFloat("features.pursuit.giveUpDistance", 320f);
+
+            // Scaled by how fast they are going. A fixed three hundred metres is a long way at
+            // walking pace and six seconds on a motorway, so the same number that reads as
+            // "they lost you" in a city read as "chases do not happen" on the freeway.
+            float giveUp = _config.GetFloat("features.pursuit.giveUpDistance", 320f) *
+                           Interception.Urgency(_config);
 
             if (distance <= giveUp) { chase.LastCloseAt = Game.GameTime; }
             else if (Game.GameTime - chase.LastCloseAt > _config.GetInt("features.pursuit.giveUpSeconds", 12) * 1000)
@@ -503,6 +515,10 @@ namespace TonightsTheNight.Core
 
             if (chase.Vehicle.Driver == null || !chase.Vehicle.Driver.Exists()) { return; }
 
+            // Pulling away from a kerb behind somebody already doing a hundred is a chase that
+            // has lost before it has started.
+            Interception.RollingStart(_config, chase.Vehicle);
+
             chase.Driving = true;
             chase.NextTaskAt = 0;
         }
@@ -526,16 +542,23 @@ namespace TonightsTheNight.Core
                 Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver, _config.GetFloat("features.pursuit.aggressiveness", 1f));
                 Function.Call(Hash.SET_DRIVER_ABILITY, driver, _config.GetFloat("features.pursuit.driverAbility", 1f));
 
+                // Re-applied on every retask rather than set once at the start, because what it
+                // is scaled against - how fast the player is currently going - changes.
+                Interception.Boost(_config, chase.Vehicle);
+
+                float cruise = Interception.Cruise(_config, _config.GetFloat("features.pursuit.cruiseSpeed", 60f));
+
                 if (_config.GetBool("features.pursuit.ram", false))
                 {
                     Function.Call(Hash.TASK_VEHICLE_MISSION_PED_TARGET,
-                        driver, chase.Vehicle, player, 6, _config.GetFloat("features.pursuit.cruiseSpeed", 60f),
+                        driver, chase.Vehicle, player, 6, cruise,
                         _config.GetInt("features.pursuit.drivingStyle", 786603), 5f, 8f, true);
                 }
                 else
                 {
                     Function.Call(Hash.TASK_VEHICLE_CHASE, driver, player);
                     Function.Call(Hash.SET_DRIVE_TASK_DRIVING_STYLE, driver, _config.GetInt("features.pursuit.drivingStyle", 786603));
+                    Function.Call(Hash.SET_DRIVE_TASK_CRUISE_SPEED, driver, cruise);
                 }
 
                 if (!_config.GetBool("features.pursuit.driveBys", true)) { return; }
@@ -603,11 +626,18 @@ namespace TonightsTheNight.Core
                 if (chase.Blip != null && chase.Blip.Exists()) { chase.Blip.Delete(); }
                 chase.Blip = null;
 
-                // A car we took is ours to let go of; one they already owned was never ours.
-                if (chase.Commandeered && chase.Vehicle != null && chase.Vehicle.Exists())
+                if (chase.Vehicle != null && chase.Vehicle.Exists())
                 {
-                    chase.Vehicle.IsPersistent = false;
-                    chase.Vehicle.MarkAsNoLongerNeeded();
+                    // Whatever engine we gave it goes back with it. A saloon left with a
+                    // doubled power multiplier is somebody else's confusing bug report.
+                    Function.Call(Hash.SET_VEHICLE_CHEAT_POWER_INCREASE, chase.Vehicle, 1f);
+
+                    // A car we took is ours to let go of; one they already owned was never ours.
+                    if (chase.Commandeered)
+                    {
+                        chase.Vehicle.IsPersistent = false;
+                        chase.Vehicle.MarkAsNoLongerNeeded();
+                    }
                 }
             }
             catch (Exception ex)

@@ -15,13 +15,35 @@ namespace TonightsTheNight.Core
         Absent,
         /// <summary>Coming for you on foot, fast, but recognisably a person running.</summary>
         Stalking,
+        /// <summary>Planted, facing you, about to do something. The window to move.</summary>
+        Winding,
         /// <summary>Crossing the gap. Collision off, physics off, a streak of light.</summary>
         Rushing,
         /// <summary>Gone from where he was and not yet where he is going.</summary>
         Blinking,
-        /// <summary>On one knee. The only time he can really be hurt.</summary>
+        /// <summary>Open. The only time he can really be hurt.</summary>
         Staggered,
         Dead
+    }
+
+    /// <summary>
+    /// The heavy moves, all of which are announced before they land.
+    ///
+    /// A move exists in this list only if there is something the player can do about it, which
+    /// is what the list is for: it is the fight's vocabulary, and every entry has a tell, a
+    /// counter and a price for missing.
+    /// </summary>
+    public enum HunterMove
+    {
+        None,
+        /// <summary>The lunge. Committed at launch, so moving off the line beats it.</summary>
+        Rush,
+        /// <summary>A fist into the road. Everything around him goes up. Get outside it.</summary>
+        Strike,
+        /// <summary>A heavy swing through the arc in front of him. Get behind him.</summary>
+        Cleave,
+        /// <summary>Whatever is lying in the street, thrown at your head. Break the line.</summary>
+        Hurl
     }
 
     /// <summary>Where the chase currently is, which decides how he moves.</summary>
@@ -49,6 +71,16 @@ namespace TonightsTheNight.Core
     /// single large hit always lands for more than its share, so the RPG in your boot, the car
     /// you are driving and whatever a physics mod does to him all matter.
     ///
+    /// The rhythm only works if the moves can be read. Every heavy move now spends a moment
+    /// planted with a ring under his feet before it fires, and the rush commits to the line it
+    /// launched on rather than following you round a corner — so stepping off it is a real
+    /// answer, and missing costs him a longer opening than connecting does. He is dangerous
+    /// because he is fast and hits like a truck, not because there is nothing to be done.
+    ///
+    /// He is also not exclusively yours. Anything in reach that is not you is a body he can
+    /// make, and he takes the detour when it is on his way, which is both the only breathing
+    /// room in the mode and the thing that sells him as a hazard rather than a scripted duel.
+    ///
     /// He crosses ground, air and water because there is no version of this that is any good if
     /// the answer is a helicopter.
     /// </summary>
@@ -62,10 +94,26 @@ namespace TonightsTheNight.Core
             "PLAYER", "CIVMALE", "CIVFEMALE", "COP", "ARMY", "SECURITY_GUARD", "PRIVATE_SECURITY"
         };
 
+        /// <summary>Something to throw, when a mode does not name its own.</summary>
+        private static readonly string[] DefaultDebris =
+        {
+            "prop_barrel_02a", "prop_bin_01a", "prop_rub_wheel_01", "prop_roadcone02a"
+        };
+
+        /// <summary>One thing he has thrown, and when to stop caring about it.</summary>
+        private sealed class Debris
+        {
+            public Prop Prop;
+            public int DieAt;
+            /// <summary>Set once it has hit something, so it cannot hit twice.</summary>
+            public bool Spent;
+        }
+
         private readonly ConfigStore _config;
         private readonly ModelResolver _models;
         private readonly Random _random;
         private readonly HunterFx _fx;
+        private readonly List<Debris> _thrown = new List<Debris>();
 
         private JsonValue _declared = JsonValue.Null;
         private Ped _ped;
@@ -85,7 +133,6 @@ namespace TonightsTheNight.Core
         /// </summary>
         private int _nextStrikeAt;
 
-        private int _nextCullAt;
         private int _nextTaskAt;
         private int _lastHealth;
 
@@ -101,8 +148,27 @@ namespace TonightsTheNight.Core
         private int _maxHealth;
         private int _vulnerableUntil;
         private int _announcedPhase;
-        private Vector3 _rushTarget;
         private int _leashWarnedAt;
+
+        /// <summary>The move he is winding up, and where he planted to do it.</summary>
+        private HunterMove _move;
+        private Vector3 _windAt;
+
+        /// <summary>
+        /// The direction a rush committed to, held rather than recomputed.
+        ///
+        /// This is the whole fix for the lunge that could not be beaten. It used to re-aim at
+        /// the player every frame, which meant running, driving, diving and turning all failed
+        /// identically: whatever you did, the line moved with you and the only counter left was
+        /// not being able to be hurt. Now it steers by a fixed rate towards where you are, so a
+        /// sharp change of direction inside the last half-second is faster than he can follow.
+        /// </summary>
+        private Vector3 _rushAim;
+
+        /// <summary>Who he is actually going for, which is not always you.</summary>
+        private Ped _target;
+        private int _targetUntil;
+        private int _nextTargetAt;
 
         /// <summary>
         /// Whether his collision is currently off, tracked rather than re-asserted.
@@ -113,6 +179,9 @@ namespace TonightsTheNight.Core
         /// through walls and floors for the rest of the night.
         /// </summary>
         private bool _noClip;
+
+        /// <summary>Whether ragdoll is currently permitted, so it is set only when it changes.</summary>
+        private bool _ragdollAllowed;
 
         /// <summary>Raw damage since the last stagger. Fills the Break meter.</summary>
         private float _break;
@@ -197,6 +266,7 @@ namespace TonightsTheNight.Core
         public void Clear()
         {
             _fx.Reset();
+            ClearThrown();
 
             try
             {
@@ -214,6 +284,9 @@ namespace TonightsTheNight.Core
             _declared = JsonValue.Null;
             _vulnerableUntil = 0;
             _break = 0f;
+            _move = HunterMove.None;
+            _target = null;
+            _targetUntil = 0;
 
             // Reset here rather than only in Begin. Begin returns early for a mode that declares
             // no hunter, so a win left this true for the rest of the session - and the Director
@@ -236,6 +309,10 @@ namespace TonightsTheNight.Core
             // outlive the mode and quietly ruin the rest of the session.
             _fx.UpdateTime();
 
+            // Before the Defeated check. Something he threw a second before he went down is
+            // still in the air, and is ours to clean up whatever else has happened.
+            UpdateThrown();
+
             if (Defeated) { return; }
 
             try
@@ -257,22 +334,23 @@ namespace TonightsTheNight.Core
                 // hospital door when you get up.
                 if (player.IsDead) { Idle(); return; }
 
-                float distance = _ped.Position.DistanceTo(player.Position);
                 Traversal traversal = TraversalFor(player);
+                Ped victim = ChooseTarget(player, traversal);
+                float distance = _ped.Position.DistanceTo(victim.Position);
 
-                Leash(player, distance);
+                Leash(player, _ped.Position.DistanceTo(player.Position));
 
                 switch (_state)
                 {
-                    case HunterState.Rushing: AdvanceRush(player); break;
+                    case HunterState.Winding: AdvanceWind(victim); break;
+                    case HunterState.Rushing: AdvanceRush(victim); break;
                     case HunterState.Blinking: AdvanceBlink(player); break;
                     case HunterState.Staggered: AdvanceStagger(); break;
-                    default: Stalk(player, distance, traversal); break;
+                    default: Stalk(victim, distance, traversal); break;
                 }
 
-                MaybeUseAbility(player, distance, traversal);
-                Cull(player);
-                Present(player, distance);
+                MaybeUseAbility(victim, distance, traversal);
+                Present(player);
             }
             catch (Exception ex)
             {
@@ -341,7 +419,6 @@ namespace TonightsTheNight.Core
                 // A headshot must not be able to end him before the Resolve pool has an opinion.
                 Function.Call(Hash.SET_PED_SUFFERS_CRITICAL_HITS, ped, false);
                 Function.Call(Hash.SET_PED_DIES_WHEN_INJURED, ped, false);
-                Function.Call(Hash.SET_PED_CAN_RAGDOLL, ped, false);
                 Function.Call(Hash.SET_PED_SEEING_RANGE, ped, 400f);
 
                 Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped, CombatAttribute.AlwaysFight, true);
@@ -350,6 +427,9 @@ namespace TonightsTheNight.Core
                 Function.Call(Hash.SET_PED_COMBAT_ABILITY, ped, 2);
                 Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, ped, 0, false);
                 Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ped, _group);
+
+                _ragdollAllowed = true;
+                AllowRagdoll(false);
 
                 string weapon = _declared["weapon"].AsString(_config.GetString("features.hunter.weapon", "WEAPON_MACHETE"));
                 if (!string.IsNullOrEmpty(weapon))
@@ -512,6 +592,106 @@ namespace TonightsTheNight.Core
             Log.Info("Hunter defeated.");
         }
 
+        // ------------------------------------------------------------------ who
+
+        /// <summary>
+        /// Who he is going for this tick.
+        ///
+        /// You, almost always. But a boss who walks past a squad of police to get to you reads
+        /// as a script with one line in it, and a mode where nothing else on the street is ever
+        /// in danger has no stakes outside your own health bar. So anything meaningfully closer
+        /// to him than you are is a detour he will take, for a few seconds, before coming back.
+        ///
+        /// It is also the only breathing room in the mode. Whoever he turns on buys you the time
+        /// to reload, which is a far better answer to "this is relentless" than making him slower.
+        /// </summary>
+        private Ped ChooseTarget(Ped player, Traversal traversal)
+        {
+            // Nothing else is reachable from a helicopter or a boat, and a detour mid-flight
+            // would strand him over the sea.
+            if (traversal != Traversal.Ground) { _target = null; return player; }
+
+            // Committed moves keep the target they launched at, or a rush would change course
+            // between frames - which is exactly the undodgeable behaviour being removed.
+            if (_state == HunterState.Winding || _state == HunterState.Rushing)
+            {
+                if (Alive(_target)) { return _target; }
+                _target = null;
+                return player;
+            }
+
+            if (Alive(_target) && Game.GameTime < _targetUntil &&
+                _ped.Position.DistanceTo(_target.Position) <= DetourRadius * 1.6f)
+            {
+                return _target;
+            }
+
+            _target = null;
+
+            if (!_config.GetBool("features.hunter.targetsOthers", true)) { return player; }
+            if (Game.GameTime < _nextTargetAt) { return player; }
+            _nextTargetAt = Game.GameTime + Math.Max(500, _config.GetInt("features.hunter.detourIntervalMs", 3500));
+
+            if (_random.NextDouble() > _config.GetFloat("features.hunter.detourChance", 0.5f)) { return player; }
+
+            Ped bystander = NearestBystander(player);
+            if (bystander == null) { return player; }
+
+            // Only when they are genuinely between him and you. Without this he wanders off
+            // after somebody behind him and the fight stops being a fight.
+            float toThem = _ped.Position.DistanceTo(bystander.Position);
+            float toYou = _ped.Position.DistanceTo(player.Position);
+            if (toThem > toYou * _config.GetFloat("features.hunter.detourAdvantage", 0.7f)) { return player; }
+
+            _target = bystander;
+            _targetUntil = Game.GameTime + Math.Max(1000, _config.GetInt("features.hunter.detourMs", 6000));
+            _nextTaskAt = 0;
+            return bystander;
+        }
+
+        private float DetourRadius
+        {
+            get { return _config.GetFloat("features.hunter.detourRadius", 30f); }
+        }
+
+        /// <summary>The nearest thing worth killing that is not you and not him.</summary>
+        private Ped NearestBystander(Ped player)
+        {
+            Ped best = null;
+            float bestDistance = DetourRadius * DetourRadius;
+            bool protectMissionPeds = _config.GetBool("compatibility.protectMissionPeds", true);
+
+            try
+            {
+                foreach (Ped nearby in World.GetNearbyPeds(_ped, DetourRadius))
+                {
+                    if (!Alive(nearby)) { continue; }
+                    if (Owns(nearby) || nearby.Handle == player.Handle) { continue; }
+
+                    // The same line every other part of this mod holds: a story ped killed here
+                    // breaks a quest in a way nobody would ever attribute back to a riot mod.
+                    if (protectMissionPeds && Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, nearby)) { continue; }
+
+                    float distance = _ped.Position.DistanceToSquared(nearby.Position);
+                    if (distance >= bestDistance) { continue; }
+
+                    bestDistance = distance;
+                    best = nearby;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not look for a hunter detour", ex);
+            }
+
+            return best;
+        }
+
+        private static bool Alive(Ped ped)
+        {
+            return ped != null && ped.Exists() && !ped.IsDead;
+        }
+
         // ------------------------------------------------------------------ movement
 
         /// <summary>The only thing that touches his collision, so it can never be left off.</summary>
@@ -524,6 +704,26 @@ namespace TonightsTheNight.Core
             {
                 Function.Call(Hash.SET_ENTITY_COLLISION, _ped, on, on);
                 _noClip = !on;
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>
+        /// Ragdoll is off while he is fighting and on while he is open.
+        ///
+        /// Both halves matter. Off, he cannot be tripped by a wing mirror or thrown across the
+        /// street by a stray blast in the middle of a lunge, which is what made him look broken.
+        /// On during the window, a rocket into an exposed boss puts him on the floor — which is
+        /// the reward the window is supposed to be, and it was not there before.
+        /// </summary>
+        private void AllowRagdoll(bool allowed)
+        {
+            if (_ragdollAllowed == allowed) { return; }
+
+            try
+            {
+                Function.Call(Hash.SET_PED_CAN_RAGDOLL, _ped, allowed);
+                _ragdollAllowed = allowed;
             }
             catch (Exception) { }
         }
@@ -562,17 +762,18 @@ namespace TonightsTheNight.Core
             return Traversal.Ground;
         }
 
-        private void Stalk(Ped player, float distance, Traversal traversal)
+        private void Stalk(Ped target, float distance, Traversal traversal)
         {
             if (traversal != Traversal.Ground)
             {
-                Pursue(player, traversal);
+                Pursue(target, traversal);
                 return;
             }
 
             // Back on the ground and back to being a solid object. Flight ends when the player
             // lands rather than when he decides to stop, so this is the only place that notices.
             Collision(true);
+            AllowRagdoll(false);
 
             float speed = SpeedFor();
 
@@ -583,6 +784,14 @@ namespace TonightsTheNight.Core
             }
             catch (Exception) { }
 
+            // Ordinary melee, in between the heavy moves. This is what makes standing next to
+            // him a decision rather than a free window: the telegraphed swings are dodgeable and
+            // this is not, but it is small, and it only reaches as far as his arms do.
+            if (distance <= _config.GetFloat("features.hunter.strikeReach", 2.6f))
+            {
+                Maul(target, Traversal.Ground);
+            }
+
             if (Game.GameTime < _nextTaskAt) { return; }
             _nextTaskAt = Game.GameTime + _config.GetInt("features.hunter.retaskMs", 1500);
 
@@ -590,13 +799,13 @@ namespace TonightsTheNight.Core
             {
                 if (distance <= _config.GetFloat("features.hunter.meleeRange", 8f))
                 {
-                    Function.Call(Hash.TASK_COMBAT_PED, _ped, player, 0, 16);
+                    Function.Call(Hash.TASK_COMBAT_PED, _ped, target, 0, 16);
                 }
                 else
                 {
                     // Run at them. Not a combat task at range: he would stop and posture, and
                     // whatever else he is, he is not somebody who takes cover.
-                    Function.Call(Hash.TASK_GO_TO_ENTITY, _ped, player, -1, 2f, 12f, 1073741824f, 0);
+                    Function.Call(Hash.TASK_GO_TO_ENTITY, _ped, target, -1, 2f, 12f, 1073741824f, 0);
                 }
             }
             catch (Exception ex)
@@ -649,16 +858,24 @@ namespace TonightsTheNight.Core
             if (length < 6f) { Maul(player, traversal); }
         }
 
-        private void Maul(Ped player, Traversal traversal)
+        /// <summary>
+        /// One blow. Everything that lands damage on somebody comes through here, so the
+        /// difference between what he does to you and what he does to a bystander is in one
+        /// place: you get hurt, they get killed, and neither is an explosion.
+        /// </summary>
+        private void Maul(Ped victim, Traversal traversal)
         {
+            if (!Alive(victim)) { return; }
             if (Game.GameTime < _nextStrikeAt) { return; }
             _nextStrikeAt = Game.GameTime + _config.GetInt("features.hunter.strikeIntervalMs", 1500);
 
+            bool isPlayer = victim.Handle == Game.Player.Character.Handle;
+
             try
             {
-                Vehicle ride = player.CurrentVehicle;
+                Vehicle ride = victim.CurrentVehicle;
 
-                if (ride != null && ride.Exists() && traversal != Traversal.Ground)
+                if (isPlayer && ride != null && ride.Exists() && traversal != Traversal.Ground)
                 {
                     ride.EngineHealth = Math.Max(-1f, ride.EngineHealth - _config.GetFloat("features.hunter.vehicleDamage", 260f));
                     ride.HealthFloat = Math.Max(1f, ride.HealthFloat - _config.GetFloat("features.hunter.vehicleDamage", 260f));
@@ -667,9 +884,23 @@ namespace TonightsTheNight.Core
                     return;
                 }
 
-                Function.Call(Hash.APPLY_DAMAGE_TO_PED, player,
-                    _config.GetInt("features.hunter.strikeDamage", 45), true, 0);
-                _fx.Shake("SMALL_EXPLOSION_SHAKE", 0.5f);
+                int damage = isPlayer
+                    ? _config.GetInt("features.hunter.strikeDamage", 45)
+                    : _config.GetInt("features.hunter.bystanderDamage", 250);
+
+                Function.Call(Hash.APPLY_DAMAGE_TO_PED, victim, damage, true, 0);
+
+                // Bodies go where he hit them. It costs nothing, it is the clearest possible
+                // signal that a blow landed, and it is why he no longer needs a silent radius
+                // that deleted whoever stood near him.
+                if (!isPlayer)
+                {
+                    Function.Call(Hash.SET_PED_TO_RAGDOLL, victim, 3000, 3000, 0, true, true, false);
+                    _fx.Shove(victim, Flat(victim.Position - _ped.Position), _config.GetFloat("features.hunter.shoveStrength", 22f));
+                    _fx.Burst(victim.Position, _config.GetString("features.hunter.fx.slam", "core/exp_grd_bzgas_smoke"), 0.5f);
+                }
+
+                _fx.Shake("SMALL_EXPLOSION_SHAKE", isPlayer ? 0.5f : 0.25f);
             }
             catch (Exception ex)
             {
@@ -701,28 +932,43 @@ namespace TonightsTheNight.Core
 
         // ------------------------------------------------------------------ abilities
 
-        private void MaybeUseAbility(Ped player, float distance, Traversal traversal)
+        private void MaybeUseAbility(Ped target, float distance, Traversal traversal)
         {
             if (_state != HunterState.Stalking) { return; }
             if (traversal != Traversal.Ground) { return; }
             if (Game.GameTime < _nextAbilityAt) { return; }
+            if (!Alive(target)) { return; }
 
-            float slamRange = _config.GetFloat("features.hunter.slamRange", 9f);
+            float strikeRange = _config.GetFloat("features.hunter.slamRange", 9f);
             float rushRange = _config.GetFloat("features.hunter.rushRange", 55f);
+            float hurlRange = _config.GetFloat("features.hunter.hurlRange", 90f);
 
-            if (distance <= slamRange)
+            if (distance <= strikeRange)
             {
-                Slam(player);
+                // Two ways to be hit at arm's length, countered in opposite directions: the
+                // ground strike wants you outside it, the cleave wants you behind him. A single
+                // close-range move is a rhythm you learn once and never think about again.
+                bool cleave = Phase >= 2 && _random.NextDouble() < _config.GetFloat("features.hunter.cleaveChance", 0.45f);
+                BeginWind(cleave ? HunterMove.Cleave : HunterMove.Strike, target);
                 return;
             }
 
             if (distance <= rushRange)
             {
-                BeginRush(player);
+                BeginWind(HunterMove.Rush, target);
                 return;
             }
 
-            BeginBlink(player);
+            // Ranged pressure, so backing off to a rooftop with a rifle is a different fight
+            // rather than a safe one. Held back until he has been hurt: the first phase is
+            // deliberately a plain melee fight you can learn the tells in.
+            if (Phase >= _config.GetInt("features.hunter.hurlFromPhase", 2) && distance <= hurlRange)
+            {
+                BeginWind(HunterMove.Hurl, target);
+                return;
+            }
+
+            BeginBlink(target);
         }
 
         private int Cooldown(string key, int fallback)
@@ -733,15 +979,152 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
+        /// The tell.
+        ///
+        /// He plants, turns to face whoever he has picked, and a ring appears under him for a
+        /// beat before anything happens. That beat is the entire difference between a fight and
+        /// a hazard: it costs him the element of surprise on every heavy move he has, and it is
+        /// the reason none of them need to be survivable only by being invincible.
+        ///
+        /// It shortens with each phase, so the fight gets harder by giving you less time rather
+        /// than by taking the answer away.
+        /// </summary>
+        private void BeginWind(HunterMove move, Ped target)
+        {
+            _move = move;
+            _target = target;
+            _state = HunterState.Winding;
+            _windAt = _ped.Position;
+
+            int windup = Math.Max(120, (int)(Windup(move) * (1f - 0.15f * (Phase - 1))));
+            _stateUntil = Game.GameTime + windup;
+
+            Collision(true);
+            AllowRagdoll(false);
+
+            try
+            {
+                Function.Call(Hash.CLEAR_PED_TASKS, _ped);
+                Function.Call(Hash.SET_PED_MOVE_RATE_OVERRIDE, _ped, 0.1f);
+                Function.Call(Hash.TASK_TURN_PED_TO_FACE_ENTITY, _ped, target, windup);
+            }
+            catch (Exception) { }
+
+            _fx.MotionBlur(_ped, false);
+            _fx.Sound("HUD_MINI_GAME_SOUNDSET", "CHECKPOINT_MISSED");
+        }
+
+        /// <summary>
+        /// How long the tell lasts for a given move, before the phase makes it shorter.
+        ///
+        /// Per move rather than one number, because the answers take different amounts of time:
+        /// stepping off a charge line is a decision, getting out of a twelve-metre ring is a
+        /// sprint, and both have to be possible from a standing start.
+        /// </summary>
+        private int Windup(HunterMove move)
+        {
+            switch (move)
+            {
+                case HunterMove.Rush: return _config.GetInt("features.hunter.rushWindupMs", 750);
+                case HunterMove.Cleave: return _config.GetInt("features.hunter.cleaveWindupMs", 600);
+                case HunterMove.Hurl: return _config.GetInt("features.hunter.hurlWindupMs", 700);
+                default: return _config.GetInt("features.hunter.slamWindupMs", 650);
+            }
+        }
+
+        /// <summary>Draws the tell every frame, then fires the move it was telling you about.</summary>
+        private void AdvanceWind(Ped target)
+        {
+            if (!Alive(target))
+            {
+                // Whoever he was about to hit is already down. Drop it rather than swinging at
+                // a body, and take the ordinary cooldown so this is not a free reset.
+                _state = HunterState.Stalking;
+                _move = HunterMove.None;
+                _nextAbilityAt = Game.GameTime + 600;
+                return;
+            }
+
+            DrawTell(target);
+
+            if (Game.GameTime < _stateUntil) { return; }
+
+            HunterMove move = _move;
+            _move = HunterMove.None;
+
+            switch (move)
+            {
+                case HunterMove.Rush: BeginRush(target); break;
+                case HunterMove.Cleave: Cleave(target); break;
+                case HunterMove.Hurl: Hurl(target); break;
+                default: Strike(); break;
+            }
+        }
+
+        /// <summary>
+        /// What the tell looks like, which is different for each move because the answer to
+        /// each move is different. A ring means get out of it; a line means get off it.
+        /// </summary>
+        private void DrawTell(Ped target)
+        {
+            try
+            {
+                switch (_move)
+                {
+                    case HunterMove.Strike:
+                        _fx.Ring(_windAt, _config.GetFloat("features.hunter.slamRadius", 12f), 220, 40, 40, 90);
+                        break;
+
+                    case HunterMove.Cleave:
+                        _fx.Ring(_windAt + Facing() * _config.GetFloat("features.hunter.cleaveRange", 5f) * 0.5f,
+                                 _config.GetFloat("features.hunter.cleaveRange", 5f) * 0.6f, 250, 150, 40, 110);
+                        break;
+
+                    case HunterMove.Rush:
+                        // The line he is about to travel, marked at both ends. Standing off it
+                        // by a couple of metres is the counter, and it has to be visible to be
+                        // a counter at all.
+                        _fx.Ring(_windAt, 1.6f, 250, 210, 60, 120);
+                        _fx.Ring(target.Position, 2.4f, 250, 210, 60, 80);
+                        break;
+
+                    case HunterMove.Hurl:
+                        _fx.Ring(_windAt, 1.4f, 200, 200, 255, 90);
+                        break;
+                }
+            }
+            catch (Exception)
+            {
+                // A tell that fails to draw is a harder fight, not a broken one.
+            }
+        }
+
+        /// <summary>
         /// The lunge. Collision off so walls, cars and fences are not part of the conversation,
         /// and a hard stop at the end that leaves him open — which is the point of it existing.
+        ///
+        /// The direction is fixed here, at launch, and only nudged afterwards. That is the
+        /// difference between an attack and a cutscene.
         /// </summary>
-        private void BeginRush(Ped player)
+        private void BeginRush(Ped target)
         {
             _state = HunterState.Rushing;
             _stateUntil = Game.GameTime + _config.GetInt("features.hunter.rushMs", 1400);
-            _rushTarget = player.Position;
             _nextAbilityAt = Game.GameTime + Cooldown("features.hunter.rushCooldownMs", 6500);
+
+            Vector3 lead = target.Position;
+
+            try
+            {
+                // Aimed at where they are going rather than where they are, so walking in a
+                // straight line is not a counter either. Dodging means changing what you are
+                // doing, which is the whole point.
+                lead += Flat(target.Velocity) * _config.GetFloat("features.hunter.rushLeadSeconds", 0.35f);
+            }
+            catch (Exception) { }
+
+            Vector3 aim = Flat(lead - _ped.Position);
+            _rushAim = aim.Length() < 0.01f ? Facing() : Vector3.Normalize(aim);
 
             try { Function.Call(Hash.CLEAR_PED_TASKS, _ped); }
             catch (Exception) { }
@@ -751,25 +1134,39 @@ namespace TonightsTheNight.Core
             _fx.Sound("HUD_FRONTEND_DEFAULT_SOUNDSET", "Menu_Accept");
         }
 
-        private void AdvanceRush(Ped player)
+        private void AdvanceRush(Ped target)
         {
             float delta = Frame();
             Vector3 here = _ped.Position;
 
-            // Re-aimed every frame, so running away extends the rush rather than dodging it.
-            _rushTarget = player.Position;
+            if (!Alive(target)) { EndRush(false); return; }
 
-            Vector3 direction = _rushTarget - here;
-            float length = direction.Length();
+            Vector3 toTarget = Flat(target.Position - here);
+            float length = toTarget.Length();
 
-            if (Game.GameTime > _stateUntil || length < 2.5f)
+            if (length <= _config.GetFloat("features.hunter.rushHitRadius", 2.6f))
             {
-                EndRush(length < 2.5f, player);
+                Connect(target);
                 return;
             }
 
+            // Past them, or out of time. Both are misses, and a miss is the opening.
+            if (Game.GameTime > _stateUntil || Vector3.Dot(toTarget, _rushAim) <= 0f)
+            {
+                EndRush(false);
+                return;
+            }
+
+            // Steering, not tracking. A fixed turn rate means he corrects for someone jogging
+            // and cannot correct for someone who jinks, which is exactly the trade this move
+            // is supposed to offer.
+            float steer = Math.Min(1f, _config.GetFloat("features.hunter.rushSteerRate", 0.9f) * delta);
+            Vector3 wanted = length < 0.01f ? _rushAim : toTarget / length;
+            Vector3 blended = _rushAim + (wanted - _rushAim) * steer;
+            if (blended.Length() > 0.01f) { _rushAim = Vector3.Normalize(blended); }
+
             float speed = _config.GetFloat("features.hunter.rushSpeed", 42f) * (0.85f + 0.15f * Phase);
-            Vector3 next = here + direction / length * Math.Min(length, speed * delta);
+            Vector3 next = here + _rushAim * (speed * delta);
 
             // Keep his own height where the probe has nothing to say. Taking its zero as an
             // answer dropped him to sea level mid-rush, which under most of the city is
@@ -780,26 +1177,90 @@ namespace TonightsTheNight.Core
             try
             {
                 Function.Call(Hash.SET_ENTITY_COORDS_NO_OFFSET, _ped, next.X, next.Y, next.Z, false, false, false);
-                Function.Call(Hash.SET_ENTITY_HEADING, _ped, Heading(direction));
+                Function.Call(Hash.SET_ENTITY_HEADING, _ped, Heading(_rushAim));
             }
             catch (Exception) { }
 
             TrailAt(here);
+
+            // Anything he runs through on the way is hit by him running through it. He is not
+            // steering around people at forty metres a second.
+            Trample(target);
         }
 
-        private void EndRush(bool connected, Ped player)
+        private void Connect(Ped target)
+        {
+            // A rush that lands has to be able to land. Its own strike timer is cleared here
+            // rather than shared, because the ordinary melee cadence would otherwise eat the
+            // one hit the whole move exists to deliver.
+            _nextStrikeAt = 0;
+            Maul(target, Traversal.Ground);
+
+            if (Alive(target) && target.Handle == Game.Player.Character.Handle)
+            {
+                try
+                {
+                    Vehicle ride = target.CurrentVehicle;
+
+                    if (ride != null && ride.Exists())
+                    {
+                        _fx.Shove(ride, Flat(ride.Position - _ped.Position) + new Vector3(0f, 0f, 0.35f),
+                                  _config.GetFloat("features.hunter.rushShoveStrength", 45f));
+                    }
+                    else
+                    {
+                        Function.Call(Hash.SET_PED_TO_RAGDOLL, target, 1500, 1500, 0, true, true, false);
+                    }
+                }
+                catch (Exception) { }
+            }
+
+            _fx.Shake("MEDIUM_EXPLOSION_SHAKE", 0.6f);
+            EndRush(true);
+        }
+
+        /// <summary>
+        /// A connected rush costs him a little; a missed one costs him a lot.
+        ///
+        /// That asymmetry is the reward for reading the tell. Without it, dodging is worth doing
+        /// only to avoid the damage, and the fight has no forward motion.
+        /// </summary>
+        private void EndRush(bool connected)
         {
             Collision(true);
             _fx.MotionBlur(_ped, false);
 
-            if (connected)
-            {
-                Maul(player, Traversal.Ground);
-                _fx.Shake("SMALL_EXPLOSION_SHAKE", 0.5f);
-            }
+            Stagger(connected
+                ? _config.GetInt("features.hunter.rushRecoveryMs", 1600)
+                : _config.GetInt("features.hunter.rushWhiffRecoveryMs", 2800),
+                connected ? "off balance" : "swung at nothing");
+        }
 
-            // Every big move has a price. This is where the fight is actually won.
-            Stagger(_config.GetInt("features.hunter.rushRecoveryMs", 1600), "off balance");
+        /// <summary>Whoever he runs over on the way to whoever he was aiming at.</summary>
+        private void Trample(Ped target)
+        {
+            try
+            {
+                foreach (Ped nearby in World.GetNearbyPeds(_ped, 2.2f))
+                {
+                    if (!Alive(nearby) || Owns(nearby)) { continue; }
+                    if (target != null && target.Exists() && nearby.Handle == target.Handle) { continue; }
+                    if (nearby.Handle == Game.Player.Character.Handle) { continue; }
+                    if (_config.GetBool("compatibility.protectMissionPeds", true) &&
+                        Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, nearby))
+                    {
+                        continue;
+                    }
+
+                    Function.Call(Hash.SET_PED_TO_RAGDOLL, nearby, 3000, 3000, 0, true, true, false);
+                    _fx.Shove(nearby, Flat(nearby.Position - _ped.Position) + new Vector3(0f, 0f, 0.4f),
+                              _config.GetFloat("features.hunter.shoveStrength", 22f));
+                    Function.Call(Hash.APPLY_DAMAGE_TO_PED, nearby,
+                        _config.GetInt("features.hunter.bystanderDamage", 250), true, 0);
+                    return;
+                }
+            }
+            catch (Exception) { }
         }
 
         /// <summary>
@@ -807,7 +1268,7 @@ namespace TonightsTheNight.Core
         /// the puff of nothing at both ends, and a beat between them are what make it read as a
         /// power rather than as the game losing track of him.
         /// </summary>
-        private void BeginBlink(Ped player)
+        private void BeginBlink(Ped target)
         {
             _state = HunterState.Blinking;
             _stateUntil = Game.GameTime + _config.GetInt("features.hunter.blinkMs", 700);
@@ -853,46 +1314,284 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
-        /// The ground slam. Nothing about it is a damage source — the explosion is invisible and
-        /// scaled to nothing — it exists to throw everything nearby around and to buy the long
-        /// recovery afterwards, which is the widest opening in the fight.
+        /// A fist into the road. Everything standing in the ring goes up and comes down hurt.
+        ///
+        /// It used to raise an explosion for the shove, which is why he spent the fight lying
+        /// on his back next to a fireball: an explosion applies its impulse to everything in
+        /// radius, and he was standing in the middle of it. The shove is aimed per entity now,
+        /// so it can never reach him, and nothing here sets anybody on fire.
         /// </summary>
-        private void Slam(Ped player)
+        private void Strike()
         {
             _nextAbilityAt = Game.GameTime + Cooldown("features.hunter.slamCooldownMs", 8000);
 
-            Vector3 at = _ped.Position;
+            // Where the ring was drawn, not where he is now. The tell is a promise about where
+            // the blow lands, and a shove or a stumble during the windup would otherwise move
+            // the hit away from the mark the player was reading.
+            Vector3 at = _windAt;
+            float radius = _config.GetFloat("features.hunter.slamRadius", 12f);
 
-            _fx.Shockwave(at, 1.4f);
             _fx.Burst(at, _config.GetString("features.hunter.fx.slam", "core/exp_grd_bzgas_smoke"), 2f);
             _fx.Shake("LARGE_EXPLOSION_SHAKE", 0.55f);
-            _fx.Lightning();
+            if (Phase >= 3) { _fx.Lightning(); }
+
+            Sweep(at, radius, 0f, _config.GetInt("features.hunter.slamDamage", 30));
+            Stagger(_config.GetInt("features.hunter.slamRecoveryMs", 3200), "spent");
+        }
+
+        /// <summary>
+        /// The heavy swing. Same idea as the ground strike with the opposite answer: it only
+        /// reaches the arc in front of him, so the counter is to be somewhere else — which is a
+        /// thing you can only do if you were told it was coming.
+        /// </summary>
+        private void Cleave(Ped target)
+        {
+            _nextAbilityAt = Game.GameTime + Cooldown("features.hunter.cleaveCooldownMs", 7000);
+
+            // Squared up one last time, so the arc that lands is the arc that was drawn. The
+            // turn task during the windup usually finishes on its own; when it does not, a
+            // cleave that misses because he never finished turning reads as the game cheating
+            // in the player's favour, which is its own kind of illegible.
+            try { Function.Call(Hash.SET_ENTITY_HEADING, _ped, Heading(target.Position - _ped.Position)); }
+            catch (Exception) { }
+
+            Vector3 at = _windAt;
+            float range = _config.GetFloat("features.hunter.cleaveRange", 5f);
+
+            _fx.Burst(at + Facing() * range * 0.5f, _config.GetString("features.hunter.fx.slam", "core/exp_grd_bzgas_smoke"), 1.4f);
+            _fx.Shake("MEDIUM_EXPLOSION_SHAKE", 0.5f);
+
+            // A cone, expressed as how far round from straight ahead still counts.
+            Sweep(at, range, _config.GetFloat("features.hunter.cleaveArc", 0.35f),
+                  _config.GetInt("features.hunter.cleaveDamage", 55));
+
+            Stagger(_config.GetInt("features.hunter.cleaveRecoveryMs", 2400), "over-committed");
+        }
+
+        /// <summary>
+        /// Everything in a radius, or in an arc of one.
+        ///
+        /// <paramref name="minimumDot"/> of zero is the full circle; anything above it is a cone
+        /// centred on where he is facing. Both are hand-applied damage and hand-applied force,
+        /// which is the rule this class now holds everywhere: nothing he does is an explosion,
+        /// so nothing he does can hit him.
+        /// </summary>
+        private void Sweep(Vector3 at, float radius, float minimumDot, int playerDamage)
+        {
+            Ped player = Game.Player.Character;
+            Vector3 facing = Facing();
+            bool protectMissionPeds = _config.GetBool("compatibility.protectMissionPeds", true);
+            float strength = _config.GetFloat("features.hunter.shoveStrength", 22f);
 
             try
             {
-                float radius = _config.GetFloat("features.hunter.slamRadius", 12f);
-
                 foreach (Ped nearby in World.GetNearbyPeds(_ped, radius))
                 {
-                    if (nearby == null || !nearby.Exists()) { continue; }
-                    if (Owns(nearby)) { continue; }
+                    if (nearby == null || !nearby.Exists() || Owns(nearby)) { continue; }
 
-                    Function.Call(Hash.SET_PED_TO_RAGDOLL, nearby, 2500, 2500, 0, true, true, false);
+                    Vector3 away = Flat(nearby.Position - at);
+                    if (away.Length() > 0.01f && minimumDot > 0f &&
+                        Vector3.Dot(Vector3.Normalize(away), facing) < minimumDot)
+                    {
+                        continue;
+                    }
+
+                    bool isPlayer = nearby.Handle == player.Handle;
+
+                    if (!isPlayer && protectMissionPeds &&
+                        Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, nearby))
+                    {
+                        continue;
+                    }
+
+                    Function.Call(Hash.APPLY_DAMAGE_TO_PED, nearby,
+                        isPlayer ? playerDamage : _config.GetInt("features.hunter.bystanderDamage", 250), true, 0);
+
+                    // Anybody sitting in a car is thrown by the car being thrown, below. Trying
+                    // to ragdoll them here does nothing and would only look like it should.
+                    if (nearby.IsInVehicle()) { continue; }
+
+                    Function.Call(Hash.SET_PED_TO_RAGDOLL, nearby, isPlayer ? 1800 : 3000, 2500, 0, true, true, false);
+                    _fx.Shove(nearby, away + new Vector3(0f, 0f, 0.45f), strength);
                 }
 
-                if (at.DistanceTo(player.Position) <= radius)
+                // Cars in the ring are thrown too, which is most of what makes the move read as
+                // heavy rather than as a scripted health subtraction.
+                foreach (Vehicle vehicle in World.GetNearbyVehicles(at, radius))
                 {
-                    Function.Call(Hash.APPLY_DAMAGE_TO_PED, player,
-                        _config.GetInt("features.hunter.slamDamage", 30), true, 0);
-                    Function.Call(Hash.SET_PED_TO_RAGDOLL, player, 1800, 1800, 0, true, true, false);
+                    if (vehicle == null || !vehicle.Exists()) { continue; }
+
+                    Vector3 away = Flat(vehicle.Position - at);
+                    if (away.Length() > 0.01f && minimumDot > 0f &&
+                        Vector3.Dot(Vector3.Normalize(away), facing) < minimumDot)
+                    {
+                        continue;
+                    }
+
+                    _fx.Shove(vehicle, away + new Vector3(0f, 0f, 0.6f),
+                              _config.GetFloat("features.hunter.vehicleShoveStrength", 12f));
                 }
             }
             catch (Exception ex)
             {
-                Log.Error("Hunter slam failed", ex);
+                Log.Error("Hunter sweep failed", ex);
+            }
+        }
+
+        /// <summary>
+        /// Something out of the street, thrown at head height.
+        ///
+        /// The mode is a melee fight, and a melee fight against something that cannot cross
+        /// water has one answer: stand far away. This is the answer to that answer. It is a real
+        /// object with real physics, so it can be sidestepped, it can be shot out of the air, and
+        /// it hits whatever it actually reaches rather than whoever it was aimed at.
+        /// </summary>
+        private void Hurl(Ped target)
+        {
+            _nextAbilityAt = Game.GameTime + Cooldown("features.hunter.hurlCooldownMs", 5500);
+
+            try
+            {
+                List<string> candidates = _declared["debris"].AsStringList();
+                if (candidates.Count == 0) { candidates = _config.GetStringList("features.hunter.debris"); }
+                if (candidates.Count == 0) { candidates = new List<string>(DefaultDebris); }
+
+                Model model;
+                if (!_models.TryPick(candidates, _random, out model) || !_models.Load(model))
+                {
+                    // Nothing to throw. Fall back to closing the distance rather than standing
+                    // there having spent the cooldown on nothing.
+                    BeginRush(target);
+                    return;
+                }
+
+                Vector3 from = _ped.Position + Facing() * 1.2f + new Vector3(0f, 0f, 1.4f);
+                Prop prop = World.CreateProp(model, from, false, false);
+                if (prop == null || !prop.Exists()) { return; }
+
+                prop.IsPersistent = true;
+
+                Vector3 lead = target.Position + new Vector3(0f, 0f, 0.5f);
+                try { lead += Flat(target.Velocity) * _config.GetFloat("features.hunter.hurlLeadSeconds", 0.5f); }
+                catch (Exception) { }
+
+                Vector3 flight = lead - from;
+                float span = flight.Length();
+                float speed = _config.GetFloat("features.hunter.hurlSpeed", 34f);
+
+                if (span > 0.01f)
+                {
+                    // A flat throw plus enough lift to arrive at head height rather than at the
+                    // kerb. Not real ballistics: it only has to look thrown and land near you.
+                    Vector3 velocity = flight / span * speed;
+                    velocity.Z += span * _config.GetFloat("features.hunter.hurlArc", 0.09f);
+                    prop.Velocity = velocity;
+                }
+
+                _thrown.Add(new Debris
+                {
+                    Prop = prop,
+                    DieAt = Game.GameTime + Math.Max(1000, _config.GetInt("features.hunter.hurlLifeMs", 6000))
+                });
+
+                _fx.Burst(from, _config.GetString("features.hunter.fx.slam", "core/exp_grd_bzgas_smoke"), 0.8f);
+                _fx.Sound("HUD_FRONTEND_DEFAULT_SOUNDSET", "Menu_Accept");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Hunter could not throw anything", ex);
             }
 
-            Stagger(_config.GetInt("features.hunter.slamRecoveryMs", 3200), "spent");
+            Stagger(_config.GetInt("features.hunter.hurlRecoveryMs", 1400), "wide open");
+        }
+
+        /// <summary>
+        /// What he threw, while it is still in the air.
+        ///
+        /// Runs on every path including the one where he is already dead, because a prop this
+        /// class made persistent and then forgot about is litter that outlives the mode.
+        /// </summary>
+        private void UpdateThrown()
+        {
+            if (_thrown.Count == 0) { return; }
+
+            float radius = _config.GetFloat("features.hunter.hurlHitRadius", 2.2f);
+            int damage = _config.GetInt("features.hunter.hurlDamage", 40);
+            Ped player = Game.Player.Character;
+
+            for (int i = _thrown.Count - 1; i >= 0; i--)
+            {
+                Debris debris = _thrown[i];
+
+                if (debris.Prop == null || !debris.Prop.Exists() || Game.GameTime > debris.DieAt)
+                {
+                    Discard(debris);
+                    _thrown.RemoveAt(i);
+                    continue;
+                }
+
+                if (debris.Spent) { continue; }
+
+                try
+                {
+                    Vector3 at = debris.Prop.Position;
+
+                    if (player != null && player.Exists() && !player.IsDead &&
+                        at.DistanceToSquared(player.Position) <= radius * radius)
+                    {
+                        Function.Call(Hash.APPLY_DAMAGE_TO_PED, player, damage, true, 0);
+                        _fx.Shake("SMALL_EXPLOSION_SHAKE", 0.4f);
+                        _fx.Burst(at, _config.GetString("features.hunter.fx.slam", "core/exp_grd_bzgas_smoke"), 0.7f);
+                        debris.Spent = true;
+                        debris.DieAt = Math.Min(debris.DieAt, Game.GameTime + 2000);
+                        continue;
+                    }
+
+                    // It hits whoever it reaches. Aimed at you, but a bystander who walks into
+                    // it takes it instead, which is the same rule everything else here follows.
+                    foreach (Ped nearby in World.GetNearbyPeds(at, radius))
+                    {
+                        if (!Alive(nearby) || Owns(nearby)) { continue; }
+                        if (_config.GetBool("compatibility.protectMissionPeds", true) &&
+                            Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, nearby))
+                        {
+                            continue;
+                        }
+
+                        Function.Call(Hash.APPLY_DAMAGE_TO_PED, nearby,
+                            _config.GetInt("features.hunter.bystanderDamage", 250), true, 0);
+                        Function.Call(Hash.SET_PED_TO_RAGDOLL, nearby, 3000, 3000, 0, true, true, false);
+                        debris.Spent = true;
+                        debris.DieAt = Math.Min(debris.DieAt, Game.GameTime + 2000);
+                        break;
+                    }
+                }
+                catch (Exception)
+                {
+                    debris.Spent = true;
+                }
+            }
+        }
+
+        private void ClearThrown()
+        {
+            foreach (Debris debris in _thrown) { Discard(debris); }
+            _thrown.Clear();
+        }
+
+        /// <summary>
+        /// Hands a thrown object back to the game rather than deleting it out from under the
+        /// player's feet. Persistence is what we took; letting go of it is all we owe.
+        /// </summary>
+        private static void Discard(Debris debris)
+        {
+            try
+            {
+                if (debris.Prop == null || !debris.Prop.Exists()) { return; }
+                debris.Prop.IsPersistent = false;
+                debris.Prop.MarkAsNoLongerNeeded();
+            }
+            catch (Exception) { }
         }
 
         // ------------------------------------------------------------------ stagger
@@ -900,6 +1599,12 @@ namespace TonightsTheNight.Core
         /// <summary>
         /// The window. Everything else in this class exists to open one of these and to make
         /// closing it feel like a loss.
+        ///
+        /// He is not put on the floor for it any more. A ragdolled boss is indistinguishable
+        /// from a boss who has fallen over by accident — which, between the ground slam's own
+        /// explosion and this, is exactly what he looked like. He plants instead, and ragdoll is
+        /// switched *on* for the duration so that a heavy hit landed in the window does put him
+        /// down. Falling over is the player's doing now, not his.
         /// </summary>
         private void Stagger(int durationMs, string why)
         {
@@ -908,6 +1613,7 @@ namespace TonightsTheNight.Core
             _state = HunterState.Staggered;
             _stateUntil = Game.GameTime + durationMs;
             _vulnerableUntil = _stateUntil;
+            _move = HunterMove.None;
 
             Collision(true);
 
@@ -915,23 +1621,41 @@ namespace TonightsTheNight.Core
             {
                 Function.Call(Hash.RESET_ENTITY_ALPHA, _ped);
                 Function.Call(Hash.CLEAR_PED_TASKS, _ped);
-                Function.Call(Hash.SET_PED_MOVE_RATE_OVERRIDE, _ped, 0.4f);
-                Function.Call(Hash.SET_PED_CAN_RAGDOLL, _ped, true);
-                Function.Call(Hash.SET_PED_TO_RAGDOLL, _ped, durationMs, durationMs, 0, true, true, false);
+                Function.Call(Hash.SET_PED_MOVE_RATE_OVERRIDE, _ped, 0.35f);
+
+                // Rooted for the duration, rather than merely untasked. A ped with AlwaysFight
+                // set and a machete in his hand does not stand about waiting when he has nothing
+                // to do - he starts a combat task of his own, and the window closes itself.
+                Function.Call(Hash.TASK_STAND_STILL, _ped, durationMs);
+
+                // Open either way; the only question is whether he is also on the floor for it.
+                AllowRagdoll(true);
+
+                if (_config.GetBool("features.hunter.staggerRagdoll", false))
+                {
+                    Function.Call(Hash.SET_PED_TO_RAGDOLL, _ped, durationMs, durationMs, 0, true, true, false);
+                }
             }
             catch (Exception) { }
 
             _fx.MotionBlur(_ped, false);
+            _fx.Sound("HUD_MINI_GAME_SOUNDSET", "CHECKPOINT_PERFECT");
+            _fx.Burst(_ped.Position, _config.GetString("features.hunter.fx.slam", "core/exp_grd_bzgas_smoke"), 0.9f);
             Log.Debug("Hunter staggered (" + why + ") for " + durationMs + "ms at " + (int)Resolve + " resolve.");
         }
 
         private void AdvanceStagger()
         {
+            // The window is drawn on him for its whole length, so there is never any doubt about
+            // whether it is still open.
+            _fx.Ring(_ped.Position, 2.2f, 250, 230, 90, 70);
+
             if (Game.GameTime < _stateUntil) { return; }
+
+            AllowRagdoll(false);
 
             try
             {
-                Function.Call(Hash.SET_PED_CAN_RAGDOLL, _ped, false);
                 Function.Call(Hash.SET_PED_MOVE_RATE_OVERRIDE, _ped, SpeedFor());
             }
             catch (Exception) { }
@@ -946,49 +1670,13 @@ namespace TonightsTheNight.Core
             catch (Exception) { }
 
             Collision(true);
+            AllowRagdoll(false);
             _state = HunterState.Stalking;
+            _move = HunterMove.None;
+            _target = null;
         }
 
         // ------------------------------------------------------------------ the rest
-
-        /// <summary>
-        /// Anybody standing near him stops standing near him. Rate-limited hard, because the
-        /// point is to leave a trail behind him rather than to depopulate the district.
-        /// </summary>
-        private void Cull(Ped player)
-        {
-            if (!_config.GetBool("features.hunter.cull", true)) { return; }
-            if (Game.GameTime < _nextCullAt) { return; }
-            _nextCullAt = Game.GameTime + _config.GetInt("features.hunter.cullIntervalMs", 2500);
-
-            try
-            {
-                float radius = _config.GetFloat("features.hunter.cullRadius", 5f);
-
-                foreach (Ped nearby in World.GetNearbyPeds(_ped, radius))
-                {
-                    if (nearby == null || !nearby.Exists() || nearby.IsDead) { continue; }
-                    if (Owns(nearby) || nearby.Handle == player.Handle) { continue; }
-
-                    // The same line every other part of this mod holds: a story ped killed here
-                    // breaks a quest in a way nobody would ever attribute back to a riot mod.
-                    if (_config.GetBool("compatibility.protectMissionPeds", true) &&
-                        Function.Call<bool>(Hash.IS_ENTITY_A_MISSION_ENTITY, nearby))
-                    {
-                        continue;
-                    }
-
-                    Function.Call(Hash.SET_ENTITY_HEALTH, nearby, 0);
-                    Function.Call(Hash.SET_PED_TO_RAGDOLL, nearby, 4000, 4000, 0, true, true, false);
-                    _fx.Burst(nearby.Position, _config.GetString("features.hunter.fx.slam", "core/exp_grd_bzgas_smoke"), 0.4f);
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Hunter cull failed", ex);
-            }
-        }
 
         /// <summary>
         /// Losing him is allowed. Losing him permanently is not — a hunter you can drive away
@@ -1005,13 +1693,18 @@ namespace TonightsTheNight.Core
                 GTA.UI.Notification.Show("~r~" + Name + "~s~ is still coming.");
             }
 
+            // Whoever he had wandered off after is no longer the point.
+            _target = null;
+            _targetUntil = 0;
+
             // Straight to a blink rather than a slow jog across the map.
             _nextAbilityAt = 0;
             if (_state == HunterState.Stalking) { BeginBlink(player); }
         }
 
-        private void Present(Ped player, float distance)
+        private void Present(Ped player)
         {
+            float distance = _ped.Position.DistanceTo(player.Position);
             float near = _config.GetFloat("features.hunter.nearDistance", 25f);
 
             if (distance < near) { _fx.StartScreenEffect(_config.GetString("features.hunter.fx.nearEffect", "RaceTurbo")); }
@@ -1022,7 +1715,7 @@ namespace TonightsTheNight.Core
             float fraction = ResolveMax <= 0f ? 0f : Resolve / ResolveMax;
 
             Hud.Banner("~r~" + Name.ToUpperInvariant() + "~s~   " + (int)(fraction * 100) + "%" +
-                       (Vulnerable ? "   ~y~EXPOSED" : "") + "   ~c~" + (int)distance + "m",
+                       Status() + "   ~c~" + (int)distance + "m",
                        0.075f, 0.5f, System.Drawing.Color.FromArgb(235, 255, 255, 255));
 
             Hud.Bar(0.35f, 0.115f, 0.30f, 0.012f, fraction,
@@ -1039,6 +1732,33 @@ namespace TonightsTheNight.Core
             }
         }
 
+        /// <summary>
+        /// The one word on the bar that says what he is doing.
+        ///
+        /// The tells are on the ground where the fight is, but the ground is not always where
+        /// you are looking - in a car, or behind him, or at a distance. A player who cannot see
+        /// the ring still gets told the swing is coming.
+        /// </summary>
+        private string Status()
+        {
+            if (_state == HunterState.Winding)
+            {
+                switch (_move)
+                {
+                    case HunterMove.Rush: return "   ~o~CHARGING";
+                    case HunterMove.Cleave: return "   ~o~SWINGING";
+                    case HunterMove.Hurl: return "   ~o~THROWING";
+                    default: return "   ~o~WINDING UP";
+                }
+            }
+
+            if (Vulnerable) { return "   ~y~EXPOSED"; }
+
+            if (Alive(_target) && _target.Handle != Game.Player.Character.Handle) { return "   ~c~DISTRACTED"; }
+
+            return string.Empty;
+        }
+
         private void TrailAt(Vector3 at)
         {
             if (_random.NextDouble() > _config.GetFloat("features.hunter.trailChance", 0.5f)) { return; }
@@ -1049,6 +1769,32 @@ namespace TonightsTheNight.Core
         {
             float baseline = _config.GetFloat("features.hunter.moveRate", 1.55f);
             return baseline + 0.15f * (Phase - 1);
+        }
+
+        /// <summary>Where he is facing, flattened. Every cone and shove is measured against it.</summary>
+        private Vector3 Facing()
+        {
+            try
+            {
+                Vector3 forward = Flat(_ped.ForwardVector);
+                if (forward.Length() > 0.01f) { return Vector3.Normalize(forward); }
+            }
+            catch (Exception) { }
+
+            double radians = (_ped.Heading + 90f) * Math.PI / 180.0;
+            return new Vector3((float)Math.Cos(radians), (float)Math.Sin(radians), 0f);
+        }
+
+        /// <summary>
+        /// A vector with the height taken out.
+        ///
+        /// Everything in this fight happens on a street. Letting Z into a shove direction meant
+        /// a target one storey up got pushed sideways and slightly into the road surface, and a
+        /// rush aimed at somebody on a balcony steered into the ground.
+        /// </summary>
+        private static Vector3 Flat(Vector3 vector)
+        {
+            return new Vector3(vector.X, vector.Y, 0f);
         }
 
         private static float Heading(Vector3 direction)
