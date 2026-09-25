@@ -1,0 +1,499 @@
+using System;
+using System.Collections.Generic;
+using GTA;
+using GTA.Math;
+using GTA.Native;
+using TonightsTheNight.Config;
+using TonightsTheNight.Factions;
+using TonightsTheNight.Util;
+
+namespace TonightsTheNight.Core
+{
+    /// <summary>
+    /// Puts spawned factions on the street: soldiers, police waves, aliens, animals.
+    ///
+    /// Deliberately the secondary supply line. Converting ambient peds costs almost nothing
+    /// because the engine has already paid to stream them; spawning is what exhausts the ped
+    /// pool and crashes riot mods. So every spawning faction is capped individually, waves are
+    /// timed rather than continuous, and arrivals are placed behind the player where possible so
+    /// they walk into the scene instead of popping into view.
+    /// </summary>
+    public sealed class Spawner
+    {
+        private readonly ConfigStore _config;
+        private readonly ModelResolver _models;
+        private readonly Random _random;
+        private readonly Reinforcements _reinforcements;
+
+        private readonly Dictionary<string, int> _nextWaveAt = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, int> _aliveByFaction = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        public Spawner(ConfigStore config, ModelResolver models, Random random, Reinforcements reinforcements)
+        {
+            _config = config;
+            _models = models;
+            _random = random;
+            _reinforcements = reinforcements;
+        }
+
+        /// <summary>Vehicles created by the last wave, for the caller to take ownership of.</summary>
+        public List<Vehicle> LastWaveVehicles { get { return _waveVehicles; } }
+
+        private readonly List<Vehicle> _waveVehicles = new List<Vehicle>();
+
+        public void Reset()
+        {
+            _nextWaveAt.Clear();
+            _aliveByFaction.Clear();
+        }
+
+        public void NoteAliveCounts(IReadOnlyList<TrackedPed> tracked)
+        {
+            _aliveByFaction.Clear();
+            foreach (TrackedPed entry in tracked)
+            {
+                if (!entry.Spawned) { continue; }
+
+                int count;
+                _aliveByFaction.TryGetValue(entry.Faction.Id, out count);
+                _aliveByFaction[entry.Faction.Id] = count + 1;
+            }
+        }
+
+        public bool WaveDue(Faction faction)
+        {
+            if (!faction.Spawn.Enabled) { return false; }
+            if (faction.Spawn.Models.Count == 0) { return false; }
+
+            int alive;
+            _aliveByFaction.TryGetValue(faction.Id, out alive);
+            if (alive >= CapFor(faction)) { return false; }
+
+            int due;
+            if (_nextWaveAt.TryGetValue(faction.Id, out due) && Game.GameTime < due) { return false; }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Spawns one wave and returns what it created. The caller registers them, which keeps
+        /// ownership of cleanup in one place.
+        /// </summary>
+        public List<Ped> SpawnWave(Faction faction, Vector3 anchor)
+        {
+            var spawned = new List<Ped>();
+            _waveVehicles.Clear();
+            SpawnProfile profile = faction.Spawn;
+
+            // Losses shorten the gap between waves as well as widening them, and so does a
+            // player who is outrunning the last one: a wave interval written for somebody
+            // driving through a district is far too long for somebody crossing it.
+            float commitment = _reinforcements.Commitment(faction);
+            float urgency = Interception.Urgency(_config);
+            _nextWaveAt[faction.Id] = Game.GameTime + (int)(profile.WaveIntervalMs / (commitment * Intensity * urgency));
+
+            Model probe;
+            if (!_models.TryPick(profile.Models, _random, out probe))
+            {
+                Log.Warn("Faction '" + faction.Id + "' has no usable ped model. Skipping its wave.");
+                return spawned;
+            }
+
+            bool byVehicle = profile.Vehicles.Count > 0 && _random.NextDouble() < profile.InVehicleChance;
+
+            if (byVehicle)
+            {
+                int vehicles = Math.Max(1, (int)Math.Round(profile.VehiclesPerWave * commitment));
+
+                for (int i = 0; i < vehicles; i++)
+                {
+                    SpawnVehicleWave(faction, anchor, spawned);
+                }
+
+                // Every vehicle failed to place - arrive on foot rather than not at all, unless
+                // arriving on foot would be absurd for this faction.
+                if (spawned.Count == 0 && profile.FootFallback)
+                {
+                    SpawnFootWave(faction, anchor, spawned);
+                }
+            }
+            else
+            {
+                SpawnFootWave(faction, anchor, spawned);
+            }
+
+            return spawned;
+        }
+
+        /// <summary>How many arrive in one wave, after casualties and intensity.</summary>
+        private int WaveSizeFor(Faction faction)
+        {
+            float commitment = _reinforcements.Commitment(faction);
+            int size = (int)Math.Round(faction.Spawn.PerWave * commitment * Intensity);
+            return size < 1 ? 1 : size;
+        }
+
+        /// <summary>
+        /// One number for "how much of this do I want", applied to every spawning faction's
+        /// wave size, ceiling and arrival rate.
+        ///
+        /// It exists because balance is not the same question for everybody. The invasion is
+        /// tuned to be survivable; somebody who wants to be overrun should be able to say so
+        /// without editing nine mode files, and somebody being overrun when they did not ask to
+        /// be should have one slider that fixes it rather than a spawn block per faction.
+        /// </summary>
+        private float Intensity
+        {
+            get
+            {
+                float value = _config.GetFloat("riot.intensity", 1f);
+                if (value < 0.1f) { return 0.1f; }
+                return value > 3f ? 3f : value;
+            }
+        }
+
+        /// <summary>
+        /// The ceiling on how many of this faction can be alive at once. It rises with losses
+        /// too, or a faction being wiped out fast would send bigger waves into the same cap and
+        /// nothing would visibly change.
+        /// </summary>
+        private int CapFor(Faction faction)
+        {
+            float commitment = _reinforcements.Commitment(faction);
+            int cap = (int)Math.Round(faction.Spawn.MaxAlive * commitment * Intensity);
+            // Intensity can be turned right down, but a faction that is enabled has to be able
+            // to put at least one member on the street or it reads as broken rather than quiet.
+            return cap < 1 ? 1 : cap;
+        }
+
+        private void SpawnFootWave(Faction faction, Vector3 anchor, List<Ped> spawned)
+        {
+            int size = WaveSizeFor(faction);
+
+            for (int i = 0; i < size; i++)
+            {
+                SpawnPoint point = PickPoint(anchor, faction.Spawn, false);
+                if (!point.Valid) { continue; }
+
+                Model model;
+                if (!NextPed(faction, out model)) { return; }
+
+                Ped ped = World.CreatePed(model, point.Position);
+                if (ped == null || !ped.Exists()) { continue; }
+
+                Prepare(ped, faction);
+                spawned.Add(ped);
+            }
+        }
+
+        /// <summary>
+        /// A model for the next member of this faction, drawn fresh each time.
+        ///
+        /// Per ped rather than per wave, so a squad of six is six people rather than one person
+        /// six times - which is what a wave looked like when the model was resolved once at the
+        /// top and handed down.
+        /// </summary>
+        private bool NextPed(Faction faction, out Model model)
+        {
+            if (!_models.TryPick(faction.Spawn.Models, _random, out model)) { return false; }
+            return _models.Load(model);
+        }
+
+        private void SpawnVehicleWave(Faction faction, Vector3 anchor, List<Ped> spawned)
+        {
+            Model vehicleModel;
+            if (!_models.TryPick(faction.Spawn.Vehicles, _random, out vehicleModel) || !_models.Load(vehicleModel))
+            {
+                // No fallback here. This runs once per vehicle in the wave, so falling back to
+                // foot inside it spawned a full foot wave per vehicle - double or triple the
+                // declared size. SpawnWave's own "nothing arrived" branch handles it once.
+                return;
+            }
+
+            bool air = string.Equals(faction.Spawn.VehicleType, "air", StringComparison.OrdinalIgnoreCase);
+            bool water = string.Equals(faction.Spawn.VehicleType, "water", StringComparison.OrdinalIgnoreCase);
+
+            SpawnPoint point = air ? PickAirPoint(anchor, faction.Spawn)
+                             : water ? PickWaterPoint(anchor, faction.Spawn)
+                             : PickPoint(anchor, faction.Spawn, true);
+
+            // No river within reach is the normal case for most of Los Santos, so a failed water
+            // spawn is a shrug rather than a problem.
+            if (!point.Valid) { return; }
+
+            // The road's own heading, not a random one. A random heading is how cars ended up
+            // across the carriageway facing a wall.
+            Vehicle vehicle = World.CreateVehicle(vehicleModel, point.Position, point.Heading);
+            if (vehicle == null || !vehicle.Exists()) { return; }
+
+            // Where this vehicle's own occupants start in the shared list, so an empty vehicle
+            // can be told apart from one whose crew simply came after somebody else's.
+            int firstSeat = spawned.Count;
+
+            // Same again: a non-persistent vehicle is the first thing the engine reclaims, so
+            // troop carriers and squad cars were disappearing almost as fast as they arrived.
+            vehicle.IsPersistent = true;
+            Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle, true, true, false);
+
+            if (air)
+            {
+                // Otherwise it spawns with the rotors stopped and drops out of the sky.
+                Function.Call(Hash.SET_HELI_BLADES_FULL_SPEED, vehicle);
+            }
+
+            if (faction.Spawn.Siren)
+            {
+                Function.Call(Hash.SET_VEHICLE_SIREN, vehicle, true);
+            }
+
+            int seats = Math.Max(1, Math.Min(faction.Spawn.Occupants,
+                Function.Call<int>(Hash.GET_VEHICLE_MAX_NUMBER_OF_PASSENGERS, vehicle) + 1));
+
+            for (int seat = 0; seat < seats; seat++)
+            {
+                Model pedModel;
+                if (!NextPed(faction, out pedModel)) { break; }
+
+                Ped ped = World.CreatePed(pedModel, point.Position);
+                if (ped == null || !ped.Exists()) { continue; }
+
+                Prepare(ped, faction);
+                // -1 is the driver's seat; passengers count up from 0.
+                Function.Call(Hash.SET_PED_INTO_VEHICLE, ped, vehicle, seat == 0 ? -1 : seat - 1);
+                spawned.Add(ped);
+            }
+
+            if (spawned.Count > firstSeat)
+            {
+                // With somebody at the wheel, and only then: a rolling start given to an empty
+                // car is a driverless vehicle coasting down the road.
+                Interception.RollingStart(_config, vehicle);
+                _waveVehicles.Add(vehicle);
+            }
+
+            if (spawned.Count == firstSeat)
+            {
+                // Nobody made it in - the ped pool is spent. Testing the shared list instead
+                // left the second and later vehicles of a wave abandoned in the street with
+                // their engines running and sirens on, registered nowhere and cleaned up by
+                // nothing.
+                vehicle.Delete();
+            }
+        }
+
+        private static void Prepare(Ped ped, Faction faction)
+        {
+            // Ours until the registry hands it back.
+            //
+            // This was false, which tells the population manager "take this whenever you like" -
+            // at the moment of creation. The manager is under pressure the whole time, partly
+            // because this mod raises the ped density itself, so it took them: soldiers vanished
+            // mid-firefight and half a wave was gone before it reached the street. The release
+            // call in EntityRegistry.Restore was always the right place to say we were done.
+            ped.IsPersistent = true;
+            // Otherwise ambient events (a car horn, a nearby scream) pull spawned peds out of
+            // whatever we tasked them with, and a squad wanders off mid-deployment.
+            ped.BlockPermanentEvents = true;
+            Function.Call(Hash.SET_PED_DROPS_WEAPONS_WHEN_DEAD, ped, false);
+
+            // A ped created without this keeps component 0 in every slot, which for some models
+            // is half an outfit and for others an untextured black figure. It is why the alien
+            // invasion arrived as a man in black with part of a suit on.
+            try
+            {
+                if (string.Equals(faction.Outfit, "random", StringComparison.OrdinalIgnoreCase))
+                {
+                    Function.Call(Hash.SET_PED_RANDOM_COMPONENT_VARIATION, ped, 0);
+                }
+                else
+                {
+                    Function.Call(Hash.SET_PED_DEFAULT_COMPONENT_VARIATION, ped);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not set component variation on a " + faction.Id + " ped", ex);
+            }
+        }
+
+        /// <summary>
+        /// Above and to one side of the riot. Helicopters need clear air rather than navmesh, so
+        /// this skips the ground checks entirely.
+        /// </summary>
+        private SpawnPoint PickAirPoint(Vector3 anchor, SpawnProfile profile)
+        {
+            double angle = _random.NextDouble() * Math.PI * 2.0;
+            float distance = profile.MinDistance +
+                             (float)_random.NextDouble() * Math.Max(1f, profile.MaxDistance - profile.MinDistance);
+
+            return new SpawnPoint
+            {
+                Position = new Vector3(
+                    anchor.X + (float)Math.Cos(angle) * distance,
+                    anchor.Y + (float)Math.Sin(angle) * distance,
+                    anchor.Z + profile.FlightHeight),
+                // Nose pointed at the riot, so it flies in rather than away from it.
+                Heading = (float)((angle * 180.0 / Math.PI) + 180.0)
+            };
+        }
+
+        /// <summary>
+        /// A point on actual water, or nowhere. Most of Los Santos is not near any, so callers
+        /// treat failure as "no boats this wave" rather than as an error.
+        /// </summary>
+        private SpawnPoint PickWaterPoint(Vector3 anchor, SpawnProfile profile)
+        {
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                double angle = _random.NextDouble() * Math.PI * 2.0;
+                float distance = profile.MinDistance +
+                                 (float)_random.NextDouble() * Math.Max(1f, profile.MaxDistance - profile.MinDistance);
+
+                float x = anchor.X + (float)Math.Cos(angle) * distance;
+                float y = anchor.Y + (float)Math.Sin(angle) * distance;
+
+                var height = new OutputArgument();
+                if (!Function.Call<bool>(Hash.GET_WATER_HEIGHT, x, y, anchor.Z, height)) { continue; }
+
+                float surface = height.GetResult<float>();
+                if (surface <= 0f) { continue; }
+
+                return new SpawnPoint
+                {
+                    Position = new Vector3(x, y, surface),
+                    Heading = (float)(_random.NextDouble() * 360.0)
+                };
+            }
+
+            return SpawnPoint.None;
+        }
+        /// <summary>Where and which way round something arrives.</summary>
+        private struct SpawnPoint
+        {
+            public Vector3 Position;
+            public float Heading;
+
+            public bool Valid { get { return Position != Vector3.Zero; } }
+
+            public static SpawnPoint None { get { return new SpawnPoint(); } }
+        }
+
+        /// <summary>
+        /// A place to arrive from, chosen the way the game's own dispatch does it: on a road,
+        /// pointing along the road, and out of sight.
+        ///
+        /// The previous version picked a bearing and a distance and dropped whatever it was
+        /// making straight onto it. That put units in the middle of the street in front of you,
+        /// and gave every vehicle a random heading - so cars materialised sideways across the
+        /// carriageway facing a wall, which is most of why arrivals never looked like arrivals.
+        /// </summary>
+        private SpawnPoint PickPoint(Vector3 anchor, SpawnProfile profile, bool onRoad)
+        {
+            int attempts = Math.Max(1, _config.GetInt("spawn.attempts", 14));
+            bool offscreen = _config.GetBool("spawn.offscreenOnly", true);
+            float visibility = _config.GetFloat("spawn.visibilityRadius", 4f);
+
+            // A faction with vehicles has distances written for driving in. Somebody arriving on
+            // foot at the same range would still be walking when the riot ended, so those - and
+            // only those - are brought in closer.
+            float scale = !onRoad && profile.Vehicles.Count > 0
+                ? _config.GetFloat("spawn.footDistanceFactor", 0.45f)
+                : 1f;
+
+            float minDistance = profile.MinDistance * scale;
+            float span = Math.Max(1f, profile.MaxDistance * scale - minDistance);
+
+            // Measured from where a moving player is going rather than from where they are, so a
+            // wave that takes a moment to place still lands near their road. Only for road
+            // arrivals, and never far enough to push an arrival onto their bumper.
+            Vector3 origin = onRoad
+                ? Interception.Anchor(_config, anchor, minDistance * 0.7f)
+                : anchor;
+
+            SpawnPoint fallback = SpawnPoint.None;
+
+            for (int attempt = 0; attempt < attempts; attempt++)
+            {
+                // Mostly behind a moving player, on the line they are actually travelling,
+                // rather than anywhere on a circle. A bearing picked at random is fine for a
+                // riot and useless for a chase: at speed, three arrivals in four were placed
+                // somewhere the player had already gone past or was never going to reach.
+                double angle = onRoad ? Interception.Bearing(_config, _random)
+                                      : _random.NextDouble() * Math.PI * 2.0;
+                float distance = minDistance + (float)_random.NextDouble() * span;
+
+                var candidate = new Vector3(
+                    origin.X + (float)Math.Cos(angle) * distance,
+                    origin.Y + (float)Math.Sin(angle) * distance,
+                    origin.Z);
+
+                SpawnPoint placed = onRoad ? OnRoad(candidate) : OnFoot(candidate);
+                if (!placed.Valid) { continue; }
+
+                // Keep the first workable point whatever happens: somewhere visible beats
+                // nowhere at all, and on an open hillside every point is visible.
+                if (!fallback.Valid) { fallback = placed; }
+
+                if (!offscreen) { return placed; }
+
+                if (!Function.Call<bool>(Hash.IS_SPHERE_VISIBLE,
+                        placed.Position.X, placed.Position.Y, placed.Position.Z, visibility))
+                {
+                    return placed;
+                }
+            }
+
+            return fallback;
+        }
+
+        /// <summary>
+        /// The nearest road node and the direction traffic runs on it, so a car arrives facing
+        /// down its own lane rather than across it.
+        /// </summary>
+        private static SpawnPoint OnRoad(Vector3 candidate)
+        {
+            try
+            {
+                var position = new OutputArgument();
+                var heading = new OutputArgument();
+
+                bool found = Function.Call<bool>(Hash.GET_CLOSEST_VEHICLE_NODE_WITH_HEADING,
+                    candidate.X, candidate.Y, candidate.Z, position, heading, 1, 3f, 0);
+
+                if (found)
+                {
+                    return new SpawnPoint
+                    {
+                        Position = position.GetResult<Vector3>(),
+                        Heading = heading.GetResult<float>()
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not query a road node", ex);
+            }
+
+            // No node within reach - the old behaviour rather than not arriving at all.
+            Vector3 street = World.GetNextPositionOnStreet(candidate);
+            return street == Vector3.Zero
+                ? SpawnPoint.None
+                : new SpawnPoint { Position = street, Heading = 0f };
+        }
+
+        /// <summary>
+        /// Somewhere to stand. The pedestrian navmesh first, then the bare ground.
+        ///
+        /// Only asking the navmesh is why quieter areas produced no arrivals at all: downtown
+        /// every candidate point is on it and out in Blaine County almost none are, so a wave
+        /// that worked perfectly in Vespucci silently spawned nobody in the desert.
+        /// </summary>
+        private static SpawnPoint OnFoot(Vector3 candidate)
+        {
+            Vector3 placed = Ground.Place(candidate);
+            return placed == Vector3.Zero
+                ? SpawnPoint.None
+                : new SpawnPoint { Position = placed, Heading = 0f };
+        }
+    }
+}

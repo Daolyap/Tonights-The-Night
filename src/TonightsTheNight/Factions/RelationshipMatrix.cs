@@ -1,0 +1,138 @@
+using System;
+using System.Collections.Generic;
+using GTA;
+using GTA.Native;
+using TonightsTheNight.Util;
+
+namespace TonightsTheNight.Factions
+{
+    /// <summary>
+    /// Registers relationship groups and wires up who hates whom.
+    ///
+    /// The whole police design rests on this rather than on the wanted system: wanted levels are
+    /// player-centric and fight us, while relationship groups let any faction be hostile to any
+    /// other with the player as just another participant.
+    /// </summary>
+    public sealed class RelationshipMatrix
+    {
+        // Vanilla scale, confirmed against the native docs.
+        public const int Companion = 0;
+        public const int Respect = 1;
+        public const int Like = 2;
+        public const int Neutral = 3;
+        public const int Dislike = 4;
+        public const int Hate = 5;
+
+        /// <summary>
+        /// The vanilla group the player is in, and must stay in.
+        ///
+        /// Moving the player into a custom group breaks every vanilla system that keys off
+        /// PLAYER — most visibly the police, who stop responding to you because their hatred is
+        /// declared against PLAYER and you are no longer in it. Factions are pointed at this
+        /// group instead of the player being moved into theirs.
+        /// </summary>
+        public const string VanillaPlayerGroup = "PLAYER";
+
+        private readonly List<int> _registered = new List<int>();
+        private readonly Dictionary<string, int> _byName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Hash of the vanilla PLAYER group — what factions point their hostility at.</summary>
+        public int PlayerGroup { get { return unchecked((int)Game.GenerateHash(VanillaPlayerGroup)); } }
+
+        /// <summary>
+        /// "hate", "neutral", a raw 0-5, or -1 for "not specified" so a faction can decline to
+        /// override its mode. Unknown text is hate, because a relation someone bothered to write
+        /// is far more likely to mean hostility than to mean nothing.
+        /// </summary>
+        public static int Parse(string text, int fallback)
+        {
+            string trimmed = (text ?? string.Empty).Trim().ToLowerInvariant();
+            if (trimmed.Length == 0) { return fallback; }
+
+            switch (trimmed)
+            {
+                case "companion": return Companion;
+                case "respect": return Respect;
+                case "like": return Like;
+                case "neutral": return Neutral;
+                case "dislike": return Dislike;
+                case "hate": return Hate;
+                default:
+                    int numeric;
+                    if (int.TryParse(trimmed, out numeric) && numeric >= 0 && numeric <= 5) { return numeric; }
+                    Log.Warn("Unknown relationship '" + text + "', treating as hate.");
+                    return Hate;
+            }
+        }
+
+        public int Register(string name)
+        {
+            int existing;
+            if (_byName.TryGetValue(name, out existing)) { return existing; }
+
+            var output = new OutputArgument();
+            Function.Call(Hash.ADD_RELATIONSHIP_GROUP, name, output);
+            int hash = output.GetResult<int>();
+
+            // The native occasionally hands back 0; the name hash is what the game uses anyway.
+            if (hash == 0)
+            {
+                hash = unchecked((int)Game.GenerateHash(name));
+                Log.Warn("ADD_RELATIONSHIP_GROUP returned 0 for '" + name + "', falling back to the name hash.");
+            }
+
+            _registered.Add(hash);
+            _byName[name] = hash;
+            Log.Debug("Registered relationship group " + name + " (" + hash + ").");
+            return hash;
+        }
+
+        /// <summary>
+        /// Sets a relationship in one direction only. The natives are directional, so mutual
+        /// hostility needs both calls — a very easy bug to write and a confusing one to debug.
+        /// </summary>
+        public void Set(int fromGroup, int toGroup, int relationship)
+        {
+            Function.Call(Hash.SET_RELATIONSHIP_BETWEEN_GROUPS, relationship, fromGroup, toGroup);
+        }
+
+        public void SetMutual(int groupA, int groupB, int relationship)
+        {
+            Set(groupA, groupB, relationship);
+            Set(groupB, groupA, relationship);
+        }
+
+        public void ApplyToPed(Ped ped, int group)
+        {
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ped, group);
+        }
+
+        /// <summary>
+        /// Puts a ped back where the game expects it. Without this, converted peds keep our
+        /// group after the riot stops and the world stays subtly wrong until a reload.
+        /// </summary>
+        public static void RestorePed(Ped ped, string vanillaGroup)
+        {
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ped, Game.GenerateHash(vanillaGroup));
+        }
+
+        public void Clear()
+        {
+            foreach (int hash in _registered)
+            {
+                try
+                {
+                    Function.Call(Hash.REMOVE_RELATIONSHIP_GROUP, hash);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Failed to remove relationship group " + hash, ex);
+                }
+            }
+
+            Log.Debug("Removed " + _registered.Count + " relationship group(s).");
+            _registered.Clear();
+            _byName.Clear();
+        }
+    }
+}
