@@ -105,6 +105,20 @@ namespace TonightsTheNight.Factions
         /// </summary>
         public string Recruits { get; private set; }
 
+        /// <summary>
+        /// Whether members give up whatever they were already carrying.
+        ///
+        /// Off by default, and it has to be, because a converted pedestrian's own weapon is
+        /// half of what makes a riot look like one: the man with the golf club had the golf
+        /// club before the riot found him.
+        ///
+        /// It exists for the modes where that is exactly wrong. An infected who keeps the
+        /// pistol they were carrying is not an infected, it is a person with a gun, and a
+        /// street full of them is two crowds having a firefight - which is what the outbreak
+        /// mode looked like, and the opposite of what it was for.
+        /// </summary>
+        public bool Disarm { get; private set; }
+
         public string RelationshipGroupName { get { return "TTN_" + Id.ToUpperInvariant(); } }
 
         public int GroupHash { get; set; }
@@ -129,6 +143,10 @@ namespace TonightsTheNight.Factions
                 Outfit = node["outfit"].AsString("default"),
                 ArrivesByCraft = node["arrivesByCraft"].AsBool(false),
                 Recruits = node["recruits"].AsString("none"),
+                // Defaulted from armedChance, so a faction declared as unarmed actually is one.
+                // Writing "armedChance": 0 and getting a crowd of people holding their own guns
+                // is a promise the config was not keeping.
+                Disarm = node["disarm"].AsBool(node["armedChance"].AsFloat(1f) <= 0f),
                 TakesWeaponPreset = node["weaponPreset"].AsBool(
                     !string.Equals(node["recruits"].AsString("none"), "none", StringComparison.OrdinalIgnoreCase)),
                 BlipEnabled = node["blip"]["enabled"].AsBool(true),

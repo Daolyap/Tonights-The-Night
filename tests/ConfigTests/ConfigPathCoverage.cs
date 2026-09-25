@@ -18,8 +18,10 @@ using TonightsTheNight.Util;
 public static class ConfigPathCoverage
 {
     private static readonly Regex Reads = new Regex(
-        // Colour is a wrapper that reads a setting and parses it, so it counts as a read.
-        @"(?:GetBool|GetInt|GetFloat|GetStringList|GetString|Resolve|SetLive|Colour)\(\s*""([a-zA-Z0-9_.]+)""",
+        // Colour and Cooldown are wrappers that read a setting and transform it, so they count
+        // as reads. Anything else that wraps a lookup has to be added here or its setting will
+        // look undeclared.
+        @"(?:GetBool|GetInt|GetFloat|GetStringList|GetString|Resolve|SetLive|Colour|Cooldown)\(\s*""([a-zA-Z0-9_.]+)""",
         RegexOptions.Compiled);
 
     public static int Run()

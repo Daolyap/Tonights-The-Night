@@ -11,7 +11,52 @@ namespace TonightsTheNight.Config
     /// </summary>
     public static class DefaultConfig
     {
-        public const string Version = "0.9.0";
+        public const string Version = "1.1.0";
+
+        /// <summary>
+        /// The shipped carryable props. Mirrored by <c>CarryProps.Fallback</c> so the feature
+        /// survives a broken config; a test keeps the two in step.
+        /// </summary>
+        private static JsonValue CarryPropDefaults()
+        {
+            JsonValue list = JsonValue.NewArray();
+
+            AddCarryProp(list, "prop_ld_case_01",      "hand", 0.13, 0.02, -0.02, 0, 0, -100);
+            AddCarryProp(list, "prop_cash_case_01",    "hand", 0.13, 0.02, -0.02, 0, 0, -100);
+            AddCarryProp(list, "prop_paper_bag_01",    "hand", 0.10, 0.01, -0.05, 10, 0, -95);
+            AddCarryProp(list, "prop_big_bag_01",      "hand", 0.14, 0.02, -0.08, 5, 0, -100);
+            AddCarryProp(list, "prop_binbag_01",       "hand", 0.12, 0.01, -0.10, 0, 0, -95);
+            AddCarryProp(list, "prop_cs_shopping_bag", "hand", 0.10, 0.01, -0.06, 5, 0, -95);
+            AddCarryProp(list, "prop_tv_flat_01",      "box",  0.025, 0.12, 0.24, -145, 290, 0);
+            AddCarryProp(list, "prop_cs_box_clothes",  "box",  0.025, 0.08, 0.255, -145, 290, 0);
+            AddCarryProp(list, "prop_cs_cardbox_01",   "box",  0.025, 0.08, 0.255, -145, 290, 0);
+            AddCarryProp(list, "prop_boxpile_07d",     "box",  0.025, 0.08, 0.255, -145, 290, 0);
+
+            return list;
+        }
+
+        private static void AddCarryProp(JsonValue list, string model, string style,
+                                         double x, double y, double z, double rx, double ry, double rz)
+        {
+            JsonValue entry = JsonValue.NewObject();
+            entry.Set("model", JsonValue.Of(model));
+            entry.Set("style", JsonValue.Of(style));
+            entry.Set("x", JsonValue.Of(x));
+            entry.Set("y", JsonValue.Of(y));
+            entry.Set("z", JsonValue.Of(z));
+            entry.Set("rx", JsonValue.Of(rx));
+            entry.Set("ry", JsonValue.Of(ry));
+            entry.Set("rz", JsonValue.Of(rz));
+            list.Add(entry);
+        }
+
+        /// <summary>A JSON array of strings, for the model lists that are resolved in order.</summary>
+        private static JsonValue Strings(params string[] values)
+        {
+            JsonValue list = JsonValue.NewArray();
+            foreach (string value in values) { list.Add(JsonValue.Of(value)); }
+            return list;
+        }
 
         public static JsonValue Build()
         {
@@ -32,8 +77,22 @@ namespace TonightsTheNight.Config
             // and did not work, so the decoration is back; this is here for anyone who wants the
             // plainest possible menu regardless.
             menu.Set("lightweight", JsonValue.Of(false));
+            // texture | flat | none.
+            //
+            // The texture is a base-game asset, tinted. A flat rectangle was the original and is
+            // the reason the header used to be the game showing through with a title floating
+            // over it: there is nothing behind a rectangle until LemonUI has sized it.
+            menu.Set("bannerStyle", JsonValue.Of("texture"));
             // "r,g,b" or "a,r,g,b".
             menu.Set("bannerColour", JsonValue.Of("235,132,22,22"));
+            menu.Set("titleColour", JsonValue.Of("255,255,255,255"));
+            // Any GTA.UI.Font name. HouseScript - the handwritten one - is the reason the title
+            // used to lie across the first two items: its glyphs are far taller than the Chalet
+            // faces LemonUI sizes the header against.
+            menu.Set("titleFont", JsonValue.Of("ChaletComprimeCologne"));
+            // Clamped to 0.4-1.2 in code. A title that overhangs the items should not be
+            // reachable by typing a number into a file.
+            menu.Set("titleScale", JsonValue.Of(0.95));
             menu.Set("maxItems", JsonValue.Of(9));
             menu.Set("width", JsonValue.Of(460));
             root.Set("menu", menu);
@@ -72,6 +131,14 @@ namespace TonightsTheNight.Config
             // clear, so keep calming them for a few seconds after a stop.
             riot.Set("pacifySeconds", JsonValue.Of(5));
             riot.Set("spawnFactions", JsonValue.Of(true));
+            // One number for "how much of this do I want". Multiplies every spawning faction's
+            // wave size and ceiling and divides the gap between its waves, so the whole mod can
+            // be turned down without editing nine mode files - or turned up past what any of
+            // them were balanced for, which is a choice rather than an accident.
+            riot.Set("intensity", JsonValue.Of(1.0));
+            // A riot you died in is over. Off, it carries on through respawn, which is the
+            // behaviour if you want the world to stay changed.
+            riot.Set("stopOnPlayerDeath", JsonValue.Of(true));
             root.Set("riot", riot);
 
             // Ped density is a per-frame native, so these are applied every tick while active.
@@ -101,6 +168,22 @@ namespace TonightsTheNight.Config
             combat.Set("seeingRange", JsonValue.Of(60));
             combat.Set("hearingRange", JsonValue.Of(60));
             combat.Set("retaskIntervalMs", JsonValue.Of(6000));
+            // How many of them may be in a combat task against *you* at once.
+            //
+            // Hostility is a property of a relationship group, and a group has no size: the
+            // moment the army could see you, every soldier in the district was individually
+            // trying to kill you. This is the difference between an occupation you are caught in
+            // and a firing squad. The rest carry on fighting whoever they were fighting, and
+            // rotate back round to you later. 0 means no limit.
+            combat.Set("maxPlayerAttackers", JsonValue.Of(4));
+            combat.Set("attackerCheckMs", JsonValue.Of(1500));
+            // How long somebody sent elsewhere is left alone before they may come back for you.
+            combat.Set("attackerCooldownMs", JsonValue.Of(8000));
+            // Rockets, launchers, miniguns and belt-fed machine guns, as a share of the picks
+            // that landed on one. A weight of 1 against a 3 in a loadout means a quarter of the
+            // faction, which by the last phase of Martial Law is a street nothing survives.
+            // 1.0 honours every loadout exactly as written.
+            combat.Set("heavyWeaponChance", JsonValue.Of(0.35));
             // Stops gunfire and screams pulling fighters out of combat and into a panic run.
             // Turning this off makes a riot scatter the moment the first shot is fired.
             combat.Set("blockPanicEvents", JsonValue.Of(true));
@@ -162,6 +245,18 @@ namespace TonightsTheNight.Config
             vehicles.Set("aggressiveness", JsonValue.Of(0.9));
             vehicles.Set("driverAbility", JsonValue.Of(0.8));
             vehicles.Set("drivingStyle", JsonValue.Of(786603));
+            // How many drivers may be coming after you at once. The weights above are a
+            // per-driver decision and say nothing about how many drivers have already made it,
+            // so every car on the street rolling independently is how you end up being converged
+            // on from four directions - which reads as the traffic being out to get you rather
+            // than as a riot.
+            vehicles.Set("maxHuntingPlayer", JsonValue.Of(1));
+            vehicles.Set("huntPlayerHoldMs", JsonValue.Of(20000));
+            // What a driver who is after you actually does. 7 is follow; 6 is attack, which
+            // against somebody on foot is resolved with the bumper. Turn on vehicles.ram if
+            // being driven into is the point.
+            vehicles.Set("playerMission", JsonValue.Of(7));
+            vehicles.Set("playerStandoff", JsonValue.Of(12));
             root.Set("vehicles", vehicles);
 
             // How arrivals are placed. Modelled on the game's own dispatch: on a road, facing
@@ -272,6 +367,14 @@ namespace TonightsTheNight.Config
             // wanted ceiling for the window and puts back whatever it was - a six-star overhaul
             // gets its six back the moment the purge ends.
             purge.Set("noWantedLevel", JsonValue.Of(true));
+            // The countdown, on screen. The single most effective answer to "does this ever
+            // end", which is a question the purge used to leave entirely to the log file.
+            purge.Set("showTimer", JsonValue.Of(true));
+            purge.Set("finalWarningSeconds", JsonValue.Of(60));
+            // The siren, and the part where everybody has to stop. Nothing new arrives during
+            // it and what is out there is talked down, so the event has an ending rather than
+            // a cut.
+            purge.Set("windDownSeconds", JsonValue.Of(25));
             features.Set("purge", purge);
 
             // Driving behaviour for police and military. The mission type and driving style are
@@ -281,7 +384,11 @@ namespace TonightsTheNight.Config
             police.Set("aggressiveness", JsonValue.Of(1.0));
             police.Set("driverAbility", JsonValue.Of(1.0));
             police.Set("muteSirens", JsonValue.Of(false));
-            police.Set("vehicleMission", JsonValue.Of(6));       // 6 = ram
+            police.Set("vehicleMission", JsonValue.Of(6));       // 6 = attack
+            // Used instead when the target is the player. 7 is follow: they pull up and get out
+            // rather than resolving it with the front of the car.
+            police.Set("playerVehicleMission", JsonValue.Of(7));
+            police.Set("playerStandoff", JsonValue.Of(15));
             police.Set("drivingStyle", JsonValue.Of(786603));
             police.Set("cruiseSpeed", JsonValue.Of(45));
             police.Set("targetReachedDistance", JsonValue.Of(5));
@@ -311,6 +418,15 @@ namespace TonightsTheNight.Config
             // the roads being blocked is what reads as a riot from a rooftop.
             JsonValue spectacle = JsonValue.NewObject();
             spectacle.Set("blackout", JsonValue.Of(true));
+            // never | phase | always. "phase" waits for a mode to ask for it, which is the
+            // original behaviour and means the biggest single change this mod makes to the look
+            // of the city is only reachable three quarters of the way through certain modes.
+            spectacle.Set("blackoutWhen", JsonValue.Of("phase"));
+            // Headlights too. Off keeps a blacked-out street readable rather than pitch black.
+            spectacle.Set("blackoutVehicles", JsonValue.Of(false));
+            // The grid coming back for half a second and going again.
+            spectacle.Set("blackoutFlicker", JsonValue.Of(true));
+            spectacle.Set("blackoutFlickerMs", JsonValue.Of(9000));
             spectacle.Set("barricades", JsonValue.Of(true));
             spectacle.Set("maxBarricades", JsonValue.Of(5));
             spectacle.Set("barricadeIntervalMs", JsonValue.Of(20000));
@@ -364,6 +480,46 @@ namespace TonightsTheNight.Config
             pursuit.Set("notify", JsonValue.Of(true));
             features.Set("pursuit", pursuit);
 
+            // Keeping a chase a chase when the player is going fast.
+            //
+            // Everything below is inert under the threshold speed and touches nothing in an
+            // ordinary riot. Above it, three things change: arrivals are measured from where the
+            // player is going rather than where they are, they are placed behind them on their
+            // own line instead of on a random bearing, and the cars that turn up get the engine
+            // and the cruise speed they need to still be there in ten seconds. Without it a
+            // chase on a motorway is a wave spawning politely into the player's rear-view mirror
+            // at a closing speed of zero.
+            JsonValue interception = JsonValue.NewObject();
+            interception.Set("enabled", JsonValue.Of(true));
+            // Metres per second. About 65 km/h - fast enough that it never fires on somebody
+            // driving round a district, and low enough to cover any open road.
+            interception.Set("speedThreshold", JsonValue.Of(18));
+            // How far ahead of the player a wave is aimed, as seconds of their current travel.
+            interception.Set("leadSeconds", JsonValue.Of(1.5));
+            interception.Set("maxLead", JsonValue.Of(120));
+            // What share of arrivals are placed behind them rather than anywhere. Not all: the
+            // road ahead being guaranteed clear is its own kind of wrong.
+            interception.Set("behindShare", JsonValue.Of(0.75));
+            // How wide the arc behind them is, in degrees either side, so a wave is a scatter
+            // across the carriageway rather than a queue in one lane.
+            interception.Set("spreadDegrees", JsonValue.Of(55));
+            // What share of the player's speed an arriving car is already doing. This is the one
+            // that actually fixes "nobody ever turns up behind you": a car is created stationary,
+            // and a stationary car behind somebody at speed spends its first four seconds losing
+            // ground. The game's own traffic arrives moving for the same reason.
+            interception.Set("rollingStart", JsonValue.Of(0.9));
+            // The engine a chase car gets, per metre per second the player has over the
+            // threshold, and the ceiling on it. Enough to close a gap; not enough to make a
+            // Manana catch an Adder in a straight line, which would read as cheating.
+            interception.Set("boostGain", JsonValue.Of(0.05));
+            interception.Set("maxBoost", JsonValue.Of(2.2));
+            // How much faster than the player their driving task is told to aim for.
+            interception.Set("cruiseMargin", JsonValue.Of(1.25));
+            // How much sooner waves arrive, and how much further a pursuit will follow, when
+            // the player is outrunning the last one.
+            interception.Set("maxUrgency", JsonValue.Of(2.5));
+            features.Set("interception", interception);
+
             // Looting. Gated on the escalation phase, so it starts once the riot has been
             // going a while rather than in the first thirty seconds.
             JsonValue looting = JsonValue.NewObject();
@@ -374,6 +530,15 @@ namespace TonightsTheNight.Config
             looting.Set("jobSeconds", JsonValue.Of(40));
             looting.Set("runDistance", JsonValue.Of(70));
             looting.Set("carryProps", JsonValue.Of(true));
+            // mixed | small. Small restricts looters to one-handed items - bags and cases -
+            // for anyone who would rather nobody ran past holding a television.
+            looting.Set("propStyle", JsonValue.Of("mixed"));
+            // What can be carried and exactly how it sits in a hand. "box" items get both arms
+            // and the box-carry animation; "hand" items hang off the prop bone in one.
+            //
+            // These offsets are eyeballed against models nobody documented, so they are config
+            // rather than constants: a prop sitting wrong is an edit and a reload.
+            looting.Set("props", CarryPropDefaults());
             // Fighters are busy. Looting is mostly what the people who were never going to
             // fight do instead, which is also what stops it thinning out the riot.
             looting.Set("fighterChance", JsonValue.Of(0.2));
@@ -406,6 +571,15 @@ namespace TonightsTheNight.Config
             craft.Set("updateIntervalMs", JsonValue.Of(250));
             craft.Set("dropScatter", JsonValue.Of(20));
             craft.Set("blip", JsonValue.Of(true));
+            // Formation geometry. Every ship owns one share of the orbit, one lane and one
+            // altitude band, which is what stops a fleet flying through itself.
+            craft.Set("radiusSpread", JsonValue.Of(25));
+            craft.Set("heightSpread", JsonValue.Of(18));
+            // The guarantee behind the plan: any two that do converge are pushed apart.
+            craft.Set("minSeparation", JsonValue.Of(45));
+            // How hard a ship is pulled towards where it should be, per second. Lower drifts
+            // more lazily; 0 snaps, which is what the old fixed-step movement looked like.
+            craft.Set("smoothing", JsonValue.Of(6));
             features.Set("craft", craft);
 
             // Whether the riot knows where you are.
@@ -448,6 +622,209 @@ namespace TonightsTheNight.Config
             profiles.Set("enabled", JsonValue.Of(true));
             profiles.Set("autoload", JsonValue.Of(""));
             features.Set("profiles", profiles);
+
+            // Wave counting for modes that are only ever about you.
+            JsonValue manhunt = JsonValue.NewObject();
+            manhunt.Set("showWave", JsonValue.Of(true));
+            manhunt.Set("killsPerWave", JsonValue.Of(6));
+            features.Set("manhunt", manhunt);
+
+            // A faction that grows by reaching people. Only Patient Zero uses it.
+            //
+            // Two layers. Contact spread is what you watch happen, person to person, in front of
+            // you. Underneath it an epidemic runs on the clock - an origin, a widening front and
+            // a prevalence on a logistic curve - and anybody the riot takes over inside that
+            // front may already have it. That second layer is what stops the outbreak being a
+            // thing that only exists in the two hundred metres around the player: driving away
+            // used to end it, and driving back used to find the district clean.
+            JsonValue contagion = JsonValue.NewObject();
+            contagion.Set("enabled", JsonValue.Of(true));
+            // Where the curve starts, and how wide the outbreak already is when it does.
+            contagion.Set("startingPrevalence", JsonValue.Of(0.03));
+            contagion.Set("startingFront", JsonValue.Of(140));
+            // The logistic rate, per second. At the default it takes a few minutes to become
+            // obvious and about a quarter of an hour to take the district - slow enough that
+            // early containment is worth attempting and fast enough that ignoring it is not.
+            contagion.Set("growthPerSecond", JsonValue.Of(0.012));
+            // It never quite reaches everybody. Some people are somewhere else.
+            contagion.Set("maxPrevalence", JsonValue.Of(0.9));
+            // How fast the edge of it moves outwards, in metres per second, before the
+            // prevalence multiplier. Distance is a delay, not an escape.
+            contagion.Set("frontMetresPerSecond", JsonValue.Of(7));
+            // What share of the core prevalence the rim carries, so the outbreak has an edge
+            // rather than a boundary.
+            contagion.Set("edgeShare", JsonValue.Of(0.3));
+            // What one contact conversion adds to the underlying curve. Small: the visible half
+            // is evidence of the epidemic, not the whole of it.
+            contagion.Set("growthPerContact", JsonValue.Of(0.0015));
+            // Containment. Every infected put down thins the seeding on that patch of city for a
+            // while, so holding a block is a real thing you can do - and only a block.
+            contagion.Set("suppressionPerKill", JsonValue.Of(0.02));
+            contagion.Set("clearRadius", JsonValue.Of(70));
+            contagion.Set("clearMs", JsonValue.Of(90000));
+            contagion.Set("maxSuppression", JsonValue.Of(0.55));
+            // How many there are, on screen, which is the question the mode makes you ask.
+            contagion.Set("showCount", JsonValue.Of(true));
+            contagion.Set("announce", JsonValue.Of(true));
+            features.Set("contagion", contagion);
+
+            // One thing on the map that is coming for you specifically.
+            //
+            // Its real health is pinned and meaningless: damage is converted into a Resolve
+            // pool at a fraction of its value, in whole while he is staggered, and staggering
+            // him is a consequence of what he does rather than something you can force. Every
+            // number below is part of that bargain, so changing one changes the fight.
+            JsonValue hunter = JsonValue.NewObject();
+            hunter.Set("enabled", JsonValue.Of(true));
+            // The pool that actually has to be emptied. Raise it for a longer night.
+            hunter.Set("resolve", JsonValue.Of(2400));
+            hunter.Set("spawnDistance", JsonValue.Of(70));
+            hunter.Set("weapon", JsonValue.Of("WEAPON_MACHETE"));
+            hunter.Set("blip", JsonValue.Of(true));
+            hunter.Set("showBar", JsonValue.Of(true));
+
+            // What ordinary damage is worth, and what it is worth in the window.
+            hunter.Set("armouredMultiplier", JsonValue.Of(0.2));
+            hunter.Set("vulnerableMultiplier", JsonValue.Of(1.0));
+            // A rocket, a car at speed, or whatever a physics mod just did to him. Always worth
+            // more than its share, because a player who brought an RPG has earned an answer.
+            hunter.Set("heavyHitThreshold", JsonValue.Of(150));
+            hunter.Set("heavyHitMultiplier", JsonValue.Of(0.75));
+            // Sustained fire is its own way in, for a player with no explosives and good aim.
+            hunter.Set("breakThreshold", JsonValue.Of(900));
+            hunter.Set("breakStaggerMs", JsonValue.Of(3000));
+            hunter.Set("phaseStaggerMs", JsonValue.Of(4500));
+
+            hunter.Set("moveRate", JsonValue.Of(1.55));
+            hunter.Set("retaskMs", JsonValue.Of(1500));
+            hunter.Set("meleeRange", JsonValue.Of(8));
+            hunter.Set("strikeDamage", JsonValue.Of(45));
+            // How far his arms reach. Inside this he lands ordinary blows between the heavy
+            // moves, which is what stops standing next to him being a free window.
+            hunter.Set("strikeReach", JsonValue.Of(2.6));
+            // What one blow does to somebody who is not you. High on purpose: he is supposed to
+            // leave bodies behind him, and a boss who needs four swings to drop a pedestrian
+            // reads as weak rather than as careful.
+            hunter.Set("bystanderDamage", JsonValue.Of(250));
+            // The shove, applied per entity by hand. This replaced a zero-damage explosion,
+            // which was visible, set bystanders alight, and knocked *him* over every time he
+            // used it - an explosion applies its impulse to whoever raised it as well.
+            // Roughly metres per second of shove: it is applied as a mass-relative impulse, so
+            // the same number moves a person and a saloon comparably. Nine is somebody leaving
+            // their feet and landing badly; thirty would be a person in orbit.
+            hunter.Set("shoveStrength", JsonValue.Of(9));
+            hunter.Set("vehicleShoveStrength", JsonValue.Of(6));
+            hunter.Set("rushShoveStrength", JsonValue.Of(14));
+            // How often it can land one. Separate from the ability cooldowns: sharing them
+            // meant a rush that connected could never actually hit anything, because the rush
+            // had just pushed that timer six seconds into the future.
+            hunter.Set("strikeIntervalMs", JsonValue.Of(1500));
+            hunter.Set("vehicleDamage", JsonValue.Of(260));
+            hunter.Set("flightSpeed", JsonValue.Of(26));
+            hunter.Set("leashDistance", JsonValue.Of(220));
+            hunter.Set("nearDistance", JsonValue.Of(25));
+            hunter.Set("trailChance", JsonValue.Of(0.5));
+            hunter.Set("timeSlow", JsonValue.Of(true));
+
+            hunter.Set("rushRange", JsonValue.Of(55));
+            hunter.Set("rushSpeed", JsonValue.Of(42));
+            hunter.Set("rushMs", JsonValue.Of(1400));
+            hunter.Set("rushCooldownMs", JsonValue.Of(6500));
+            hunter.Set("rushRecoveryMs", JsonValue.Of(1600));
+            // The tell. He plants and a ring appears under him before the lunge fires, and this
+            // is how long you get. It is the single most important number in the fight: without
+            // it the rush re-aimed every frame and could not be beaten by anything except being
+            // unable to take damage.
+            hunter.Set("rushWindupMs", JsonValue.Of(750));
+            // How fast he may turn once committed, in radians-ish per second of blend. Enough to
+            // follow somebody jogging, not enough to follow somebody who changes direction.
+            hunter.Set("rushSteerRate", JsonValue.Of(0.9));
+            // Aimed at where you are going rather than where you are, so walking in a straight
+            // line away from it is not a dodge either.
+            hunter.Set("rushLeadSeconds", JsonValue.Of(0.35));
+            hunter.Set("rushHitRadius", JsonValue.Of(2.6));
+            // Missing costs him more than connecting does. That asymmetry is the reward for
+            // reading the tell, and it is where most of the fight is actually won.
+            hunter.Set("rushWhiffRecoveryMs", JsonValue.Of(2800));
+
+            hunter.Set("blinkMs", JsonValue.Of(700));
+            hunter.Set("blinkCooldownMs", JsonValue.Of(9000));
+            hunter.Set("blinkArrivalRange", JsonValue.Of(22));
+
+            // The ground strike. A fist into the road: everything in the ring goes up, nothing
+            // catches fire, and the counter is to be outside it when it lands.
+            hunter.Set("slamRange", JsonValue.Of(9));
+            hunter.Set("slamRadius", JsonValue.Of(12));
+            hunter.Set("slamDamage", JsonValue.Of(30));
+            hunter.Set("slamCooldownMs", JsonValue.Of(8000));
+            hunter.Set("slamRecoveryMs", JsonValue.Of(3200));
+            hunter.Set("slamWindupMs", JsonValue.Of(650));
+
+            // The heavy swing. Same range band as the ground strike with the opposite answer:
+            // it only reaches the arc in front of him, so the counter is to be behind him.
+            // Having two close-range moves is what stops the melee becoming one memorised beat.
+            hunter.Set("cleaveRange", JsonValue.Of(5));
+            // How wide the arc is, as the minimum "how far round from straight ahead" that still
+            // counts. Higher is narrower; 0 would be the full circle.
+            hunter.Set("cleaveArc", JsonValue.Of(0.35));
+            hunter.Set("cleaveDamage", JsonValue.Of(55));
+            hunter.Set("cleaveChance", JsonValue.Of(0.45));
+            hunter.Set("cleaveWindupMs", JsonValue.Of(600));
+            hunter.Set("cleaveCooldownMs", JsonValue.Of(7000));
+            hunter.Set("cleaveRecoveryMs", JsonValue.Of(2400));
+
+            // The thrown object. A melee boss with no answer to distance is beaten by standing
+            // on a roof, and "he teleports to you" is not an answer, it is a punishment. This
+            // is a real prop with real physics: it can be sidestepped and it can be shot.
+            hunter.Set("hurlRange", JsonValue.Of(90));
+            // Held back until he has been hurt, so the first phase is a plain melee fight you
+            // can learn the tells in.
+            hunter.Set("hurlFromPhase", JsonValue.Of(2));
+            hunter.Set("hurlDamage", JsonValue.Of(40));
+            hunter.Set("hurlSpeed", JsonValue.Of(34));
+            hunter.Set("hurlArc", JsonValue.Of(0.09));
+            hunter.Set("hurlLeadSeconds", JsonValue.Of(0.5));
+            hunter.Set("hurlHitRadius", JsonValue.Of(2.2));
+            hunter.Set("hurlLifeMs", JsonValue.Of(6000));
+            hunter.Set("hurlWindupMs", JsonValue.Of(700));
+            hunter.Set("hurlCooldownMs", JsonValue.Of(5500));
+            hunter.Set("hurlRecoveryMs", JsonValue.Of(1400));
+            // Resolved in order like every other model list here, so an install missing one
+            // still gets something thrown at it.
+            hunter.Set("debris", Strings("prop_barrel_02a", "prop_bin_01a", "prop_rub_wheel_01", "prop_roadcone02a"));
+
+            // Off: the window plants him, upright and open, and ragdoll is switched on for its
+            // duration so a heavy hit *you* land puts him down. On: he falls over for it by
+            // himself, which is what the fight used to look like and what made a boss whose own
+            // slam knocked him flat impossible to tell apart from a bug.
+            hunter.Set("staggerRagdoll", JsonValue.Of(false));
+
+            // He is not exclusively yours. Anything meaningfully closer to him than you are is
+            // a detour he will take for a few seconds before coming back, which is both the only
+            // breathing room in the mode and the thing that makes him read as a hazard loose in
+            // a city rather than as a scripted duel.
+            hunter.Set("targetsOthers", JsonValue.Of(true));
+            hunter.Set("detourRadius", JsonValue.Of(30));
+            hunter.Set("detourChance", JsonValue.Of(0.5));
+            hunter.Set("detourMs", JsonValue.Of(6000));
+            hunter.Set("detourIntervalMs", JsonValue.Of(3500));
+            // How much closer than you they have to be before the detour is worth it. Lower is
+            // fussier; at 1 he would wander off after anybody at all and stop being a fight.
+            hunter.Set("detourAdvantage", JsonValue.Of(0.7));
+
+            // Particle assets, screen effects and an explosion id, all community-documented
+            // rather than official. Written as "asset/effect". Anything missing is skipped: a
+            // hunter with no particles is still a hunter.
+            JsonValue hunterFx = JsonValue.NewObject();
+            hunterFx.Set("trail", JsonValue.Of("core/exp_grd_bzgas_smoke"));
+            hunterFx.Set("blink", JsonValue.Of("core/exp_grd_bzgas_smoke"));
+            hunterFx.Set("slam", JsonValue.Of("core/exp_grd_bzgas_smoke"));
+            hunterFx.Set("nearEffect", JsonValue.Of("RaceTurbo"));
+            hunterFx.Set("phaseEffect", JsonValue.Of("DrugsTrevorClownsFightIn"));
+            hunterFx.Set("deathEffect", JsonValue.Of("SwitchHUDIn"));
+            hunter.Set("fx", hunterFx);
+
+            features.Set("hunter", hunter);
 
             root.Set("features", features);
             return root;

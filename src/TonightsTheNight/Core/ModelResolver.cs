@@ -81,6 +81,31 @@ namespace TonightsTheNight.Core
         }
 
         /// <summary>
+        /// One of the candidates this install has, chosen at random rather than in order.
+        ///
+        /// <see cref="TryResolve"/> answers "the best of these", which is right when the list is
+        /// a preference order — the craft models, the hunter's models. It is badly wrong when
+        /// the list is a set to draw from, and every spawn profile in the mod is a set to draw
+        /// from. Using the ordered version for those meant a faction declaring four vehicles
+        /// always got the first one: every armoured column was four Rhinos and no Insurgents,
+        /// and every coastal patrol was the marine model that happens to be a man in a white
+        /// t-shirt, because that name was written first.
+        /// </summary>
+        public bool TryPick(IEnumerable<string> candidates, Random random, out Model model)
+        {
+            List<Model> found = ResolveAll(candidates);
+
+            if (found.Count == 0)
+            {
+                model = default(Model);
+                return false;
+            }
+
+            model = found[random.Next(found.Count)];
+            return true;
+        }
+
+        /// <summary>
         /// Requests the model and waits briefly. Streaming is asynchronous, so spawning without
         /// this produces an invisible or missing entity rather than an error.
         /// </summary>

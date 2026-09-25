@@ -27,6 +27,22 @@ namespace TonightsTheNight.Core
 
         public bool Active { get; private set; }
 
+        /// <summary>
+        /// True for the last stretch of the event, after the clock has run out and before the
+        /// mode stops.
+        ///
+        /// The purge used to end on a single frame: the timer hit zero, the mode stopped, and
+        /// everything that had been happening simply was not any more. Whether that read as
+        /// "it ended" or as "it never ended" depended entirely on whether you happened to be
+        /// looking at a fight at the time. So there is now a window with a shape to it — the
+        /// sirens go, nothing new arrives, and what is already out there is talked down — and
+        /// the caller can see it in <see cref="WindingDown"/> and stop feeding the riot.
+        /// </summary>
+        public bool WindingDown { get; private set; }
+
+        private int _windDownEndsAt;
+        private bool _warned;
+
         /// <summary>Counts down. It used to hold the starting total forever, which made every
         /// display of it - overlay, log, menu - look like a stopped clock.</summary>
         public int SecondsRemaining { get; private set; }
@@ -53,6 +69,9 @@ namespace TonightsTheNight.Core
 
             _startedAt = Game.GameTime;
             Active = true;
+            WindingDown = false;
+            _warned = false;
+            _windDownEndsAt = 0;
             _lastAnnouncedSecond = -1;
             _nextLogAt = 0;
 
@@ -72,7 +91,7 @@ namespace TonightsTheNight.Core
             Log.Info("Purge armed: " + minutes + " minute(s) from " + hour.ToString("00") + ":" + minute.ToString("00") + ".");
         }
 
-        /// <summary>Returns true on the tick the purge ends, so the caller can stop the mode.</summary>
+        /// <summary>Returns true on the tick the purge is fully over, so the caller stops the mode.</summary>
         public bool Update()
         {
             if (!Active) { return false; }
@@ -82,8 +101,12 @@ namespace TonightsTheNight.Core
             // script and will happily hand you a star back.
             HoldWantedLevelDown();
 
+            if (WindingDown) { return UpdateWindDown(); }
+
             int elapsed = (Game.GameTime - _startedAt) / 1000;
             SecondsRemaining = Math.Max(0, _totalSeconds - elapsed);
+
+            DrawClock(SecondsRemaining, SecondsRemaining <= 60 ? "~r~" : "~s~");
 
             if (SecondsRemaining != _lastAnnouncedSecond)
             {
@@ -96,6 +119,18 @@ namespace TonightsTheNight.Core
                 }
             }
 
+            // One warning before the end, so the last minute is something you can act on rather
+            // than something you find out about afterwards.
+            int warnAt = Math.Max(0, _config.GetInt("features.purge.finalWarningSeconds", 60));
+            if (!_warned && warnAt > 0 && SecondsRemaining <= warnAt && SecondsRemaining > 0)
+            {
+                _warned = true;
+                GTA.UI.Notification.Show("~o~The purge ends in " + Hud.Clock(SecondsRemaining) + ".");
+                GTA.UI.Screen.ShowSubtitle(
+                    "~o~The commencement of the annual purge will conclude in " + Hud.Clock(SecondsRemaining) +
+                    ".~s~~n~Weapons are to be surrendered at the siren.", 6000);
+            }
+
             // A minute-by-minute line, so "it never ended" is answerable from the log instead of
             // from memory.
             if (Game.GameTime >= _nextLogAt)
@@ -106,11 +141,49 @@ namespace TonightsTheNight.Core
 
             if (SecondsRemaining > 0) { return false; }
 
+            BeginWindDown();
+            return false;
+        }
+
+        /// <summary>
+        /// The siren, and the part where everybody has to stop. Nothing new arrives from here
+        /// on and the caller talks down whoever is still out there.
+        /// </summary>
+        private void BeginWindDown()
+        {
+            WindingDown = true;
+            _windDownEndsAt = Game.GameTime + Math.Max(0, _config.GetInt("features.purge.windDownSeconds", 25)) * 1000;
+
+            GTA.UI.Screen.ShowSubtitle(
+                "~g~THE SIREN.~s~~n~The annual purge has concluded. Emergency services have resumed operation.~n~" +
+                "~o~Return to your homes.", 8000);
+            GTA.UI.Notification.Show("~g~The purge has ended.~s~ Stand down.");
+            Log.Info("Purge window elapsed - winding down.");
+        }
+
+        private bool UpdateWindDown()
+        {
+            int left = Math.Max(0, (_windDownEndsAt - Game.GameTime) / 1000);
+            DrawClock(left, "~g~", "STAND DOWN");
+
+            if (Game.GameTime < _windDownEndsAt) { return false; }
+
             Active = false;
-            GTA.UI.Screen.ShowSubtitle("~g~The purge has ended.~s~~n~Emergency services have resumed operation.", 7000);
-            GTA.UI.Notification.Show("~g~The purge has ended.");
-            Log.Info("Purge window elapsed - stopping the mode.");
+            WindingDown = false;
+            Log.Info("Purge wind-down complete - stopping the mode.");
             return true;
+        }
+
+        /// <summary>
+        /// The countdown, on screen. The single most effective answer to "does this ever end":
+        /// a number that is visibly going down.
+        /// </summary>
+        private void DrawClock(int seconds, string colour, string label = "PURGE")
+        {
+            if (!_config.GetBool("features.purge.showTimer", true)) { return; }
+
+            Hud.Banner(colour + label + " " + Hud.Clock(seconds), 0.035f, 0.6f,
+                System.Drawing.Color.FromArgb(235, 255, 255, 255));
         }
 
         /// <summary>Minutes and seconds for the overlay, or an empty string when not running.</summary>
@@ -127,6 +200,7 @@ namespace TonightsTheNight.Core
         {
             RestoreWantedLevel();
             Active = false;
+            WindingDown = false;
             _armed = false;
             SecondsRemaining = 0;
         }

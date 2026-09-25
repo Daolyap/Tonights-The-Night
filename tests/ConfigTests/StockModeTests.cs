@@ -262,7 +262,13 @@ public static class StockModeTests
     }
 
     /// <summary>Pulls the verbatim string constants back out of StockModes.cs.</summary>
-    private static Dictionary<string, string> ExtractModes()
+    /// <summary>
+    /// The shipped modes, read out of the source rather than from the assembly: the test project
+    /// compiles only the handful of files that do not touch the game, and StockModes sits behind
+    /// several that do. Internal so the content tests can assert on one mode's loadout without a
+    /// second copy of this.
+    /// </summary>
+    internal static Dictionary<string, string> ExtractModes()
     {
         var result = new Dictionary<string, string>();
 

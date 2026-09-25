@@ -40,6 +40,15 @@ namespace TonightsTheNight.Factions
         /// <summary>Ships in the sky, if this mode has any. Only the invasion does.</summary>
         public JsonValue Craft { get; private set; }
 
+        /// <summary>An individual pursuer, for a mode built around one thing rather than a crowd.</summary>
+        public JsonValue Hunter { get; private set; }
+
+        /// <summary>Wave counting and announcements, for modes that are only ever about you.</summary>
+        public JsonValue Manhunt { get; private set; }
+
+        /// <summary>A faction that grows by reaching people rather than by being spawned.</summary>
+        public JsonValue Contagion { get; private set; }
+
         /// <summary>How this mode treats the player when they have not picked a side.</summary>
         public int PlayerRelationship { get; private set; }
 
@@ -66,6 +75,9 @@ namespace TonightsTheNight.Factions
                 Ambience = node["ambience"],
                 Purge = node["purge"],
                 Craft = node["craft"],
+                Hunter = node["hunter"],
+                Manhunt = node["manhunt"],
+                Contagion = node["contagion"],
                 PlayerRelationship = ParseRelationship(node["playerRelationship"].AsString("neutral")),
                 Order = node["order"].AsInt(1000)
             };

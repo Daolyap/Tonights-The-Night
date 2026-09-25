@@ -49,9 +49,16 @@ namespace TonightsTheNight.Menu
         private NativeMenu _pursuitMenu;
         private NativeMenu _lootMenu;
         private NativeMenu _profileMenu;
+        private NativeMenu _hunterMenu;
+        private NativeMenu _powerMenu;
+        private NativeMenu _loadoutMenu;
+        private NativeMenu _pickerMenu;
         private NativeItem _stopItem;
         private NativeItem _phaseItem;
         private int _profileSlot = 1;
+
+        /// <summary>Weight given to the next weapon added to the custom loadout.</summary>
+        private int _nextWeight = 1;
 
         public RiotMenu(ConfigStore config, Director director, ModeLibrary modes, Action reloadRequested)
         {
@@ -101,15 +108,32 @@ namespace TonightsTheNight.Menu
         /// <summary>
         /// The mod's look, applied to every menu.
         ///
-        /// An earlier version stripped the banner, the corner buttons and mouse support on the
-        /// theory that the Scaleform was what halved the frame rate. It was not - the lag
-        /// survived all of it - so the decoration is back and this is where the styling lives
-        /// instead. If you want the bare version, menu.lightweight still does it.
+        /// Two things here were wrong and both were visible in every screenshot anyone took.
+        ///
+        /// The banner was a <c>ScaledRectangle</c> created with an empty size. LemonUI resizes a
+        /// banner on recalculate, but a flat rectangle has no texture behind it, so anywhere the
+        /// recalculate had not landed yet the header was simply the game showing through — a
+        /// title floating over traffic. It is a real texture now, tinted, which is both solid
+        /// and what every other menu in the game does.
+        ///
+        /// The title was set in HouseScript, which is the handwritten Los Santos font. Its
+        /// glyphs are far taller than the Chalet faces LemonUI sizes its header against, so at
+        /// the default banner scale the title overhung the subtitle bar and the first two items.
+        /// That is the text lying across "Riot Modes" in every screenshot. The scale is a
+        /// setting now and the default font is one that fits.
         /// </summary>
         private void Style(NativeMenu menu)
         {
             try
             {
+                menu.ItemCount = CountVisibility.Always;
+                menu.MaxItems = Math.Max(4, _config.GetInt("menu.maxItems", 9));
+                menu.Width = Math.Max(300f, _config.GetFloat("menu.width", 460f));
+                // NameFont is the subtitle bar and DescriptionFont the panel underneath; the
+                // banner's own font is BannerText.Font, set below.
+                menu.NameFont = GTA.UI.Font.ChaletComprimeCologne;
+                menu.DescriptionFont = GTA.UI.Font.ChaletLondon;
+
                 if (_config.GetBool("menu.lightweight", false))
                 {
                     menu.Banner = null;
@@ -119,25 +143,60 @@ namespace TonightsTheNight.Menu
                     return;
                 }
 
-                // A flat colour banner rather than the stock texture: no art to ship, and a
-                // riot mod should not open in Franchise blue.
-                menu.Banner = new ScaledRectangle(PointF.Empty, SizeF.Empty)
-                {
-                    Color = Colour("menu.bannerColour", Color.FromArgb(235, 132, 22, 22))
-                };
-
-                if (menu.BannerText != null) { menu.BannerText.Font = GTA.UI.Font.HouseScript; }
-                menu.NameFont = GTA.UI.Font.ChaletComprimeCologne;
-                menu.DescriptionFont = GTA.UI.Font.ChaletLondon;
-
-                menu.ItemCount = CountVisibility.Always;
-                menu.MaxItems = Math.Max(4, _config.GetInt("menu.maxItems", 9));
-                menu.Width = Math.Max(300f, _config.GetFloat("menu.width", 460f));
+                menu.Banner = BuildBanner();
+                StyleBannerText(menu);
             }
             catch (Exception ex)
             {
                 Log.Error("Could not style a menu", ex);
             }
+        }
+
+        /// <summary>
+        /// texture | flat | none.
+        ///
+        /// The texture is the default because it is the only one that cannot end up transparent:
+        /// it is a base-game asset every install has, and tinting it gives the same flat colour
+        /// the rectangle was reaching for with none of the ways that went wrong.
+        /// </summary>
+        private I2Dimensional BuildBanner()
+        {
+            string style = _config.GetString("menu.bannerStyle", "texture");
+            Color colour = Colour("menu.bannerColour", Color.FromArgb(235, 132, 22, 22));
+
+            if (string.Equals(style, "none", StringComparison.OrdinalIgnoreCase)) { return null; }
+
+            if (string.Equals(style, "flat", StringComparison.OrdinalIgnoreCase))
+            {
+                return new ScaledRectangle(PointF.Empty, new SizeF(_config.GetFloat("menu.width", 460f), 108f))
+                {
+                    Color = colour
+                };
+            }
+
+            return new ScaledTexture(PointF.Empty, new SizeF(_config.GetFloat("menu.width", 460f), 108f),
+                "commonmenu", "interaction_bgd")
+            {
+                Color = colour
+            };
+        }
+
+        private void StyleBannerText(NativeMenu menu)
+        {
+            if (menu.BannerText == null) { return; }
+
+            GTA.UI.Font font;
+            if (!Enum.TryParse(_config.GetString("menu.titleFont", "ChaletComprimeCologne"), true, out font))
+            {
+                font = GTA.UI.Font.ChaletComprimeCologne;
+            }
+
+            menu.BannerText.Font = font;
+            // Clamped rather than trusted. A title that overhangs the items is exactly the bug
+            // being fixed here, and it should not be reachable by typing a number into a file.
+            menu.BannerText.Scale = Math.Max(0.4f, Math.Min(1.2f, _config.GetFloat("menu.titleScale", 0.95f)));
+            menu.BannerText.Color = Colour("menu.titleColour", Color.White);
+            menu.BannerText.Outline = false;
         }
 
         /// <summary>Reads "r,g,b" or "a,r,g,b" from config, falling back to the shipped colour.</summary>
@@ -175,6 +234,8 @@ namespace TonightsTheNight.Menu
             BuildDrivingMenu();
             BuildPursuitMenu();
             BuildLootMenu();
+            BuildPowerMenu();
+            BuildHunterMenu();
             BuildFeaturesMenu();
             BuildProfileMenu();
 
@@ -220,8 +281,14 @@ namespace TonightsTheNight.Menu
         /// </summary>
         private NativeSubmenuItem AddSubMenu(NativeMenu submenu, string title, string description)
         {
+            return AddSubMenu(_root, submenu, title, description);
+        }
+
+        /// <summary>The same, for a page that hangs off another page rather than off the root.</summary>
+        private NativeSubmenuItem AddSubMenu(NativeMenu parent, NativeMenu submenu, string title, string description)
+        {
             Style(submenu);
-            NativeSubmenuItem item = _root.AddSubMenu(submenu);
+            NativeSubmenuItem item = parent.AddSubMenu(submenu);
             item.Title = title;
             item.Description = description;
             return item;
@@ -264,6 +331,21 @@ namespace TonightsTheNight.Menu
             _tuningMenu = new NativeMenu("Tonight's The Night", "TUNING");
             _pool.Add(_tuningMenu);
             AddSubMenu(_tuningMenu, "Tuning", "Live settings: how many peds, how hard they fight, blips.");
+
+            AddPercentSlider(_tuningMenu, "Intensity", "riot.intensity", 1f,
+                "How much of everything. Scales every spawning faction's wave size and ceiling and "
+                + "how often they arrive. Turn it down if a mode is overwhelming you; turn it up if "
+                + "nothing is. Nothing else here has this much effect.", 2f);
+
+            AddRangeSlider(_tuningMenu, "How Many Can Fight You", "combat.maxPlayerAttackers", 4, 0, 16, 1,
+                "How many of them may be in a combat task against you at once. Hostility is a "
+                + "property of a group and a group has no size, so without this every soldier who "
+                + "could see you was individually trying to kill you. 0 is no limit.");
+
+            AddPercentSlider(_tuningMenu, "Heavy Weapons", "combat.heavyWeaponChance", 0.35f,
+                "Rockets, launchers, miniguns and machine guns, as a share of the picks that landed "
+                + "on one. A loadout weight is a share of a faction, not a rarity - an RPG at weight "
+                + "1 against a 3 arms a quarter of them. 100% honours every loadout as written.");
 
             AddPercentSlider(_tuningMenu, "Conversion Chance", "riot.conversionChance", 0.85f,
                 "How likely a nearby pedestrian is to be pulled into a faction.");
@@ -334,10 +416,7 @@ namespace TonightsTheNight.Menu
                 "Changing the preset does not re-arm the people already out there. It takes effect " +
                 "as the riot pulls in more of the crowd, which happens continuously."));
 
-            _weaponMenu.Add(new NativeItem("Custom Preset",
-                "Pick Custom, then list weapon names in weapons.custom in user.json - " +
-                "for example [\"WEAPON_BAT\", {\"name\": \"WEAPON_PISTOL\", \"weight\": 0.2}]. " +
-                "Reload with " + _config.GetString("menu.reloadKey", "F5") + "."));
+            BuildLoadoutMenu();
         }
 
         /// <summary>
@@ -371,8 +450,15 @@ namespace TonightsTheNight.Menu
             AddToggle(_drivingMenu, "Drive Through Crowds", "vehicles.driveThroughCrowds", true,
                 "Rioter drivers stop steering around people.");
 
+            AddRangeSlider(_drivingMenu, "Cars Hunting You At Once", "vehicles.maxHuntingPlayer", 1, 0, 8, 1,
+                "The weights above are each driver's own decision and say nothing about how many "
+                + "drivers have already made it. Without a ceiling, every car on the street rolling "
+                + "independently converges on you from four directions.");
+
             AddToggle(_drivingMenu, "Ram Instead Of Chase", "vehicles.ram", false,
-                "On: drivers going after someone drive into them rather than following.");
+                "On: drivers going after someone drive into them rather than following. Off, a "
+                + "driver who is after you tails you and their passengers lean out - a vehicle "
+                + "chase task against somebody on foot is resolved with the bumper.");
         }
 
         /// <summary>
@@ -427,6 +513,12 @@ namespace TonightsTheNight.Menu
 
             AddToggle(_lootMenu, "Carry Things", "features.looting.carryProps", true,
                 "Televisions, cases and bin bags. Off: they just leave in a hurry.");
+
+            AddPicker(_lootMenu, "What They Carry", "features.looting.propStyle",
+                new[] { "Anything", "Small Items Only" }, new[] { "mixed", "small" },
+                "Anything: big items get both arms and the box-carry animation, small ones hang off "
+                + "one hand. Small Items Only: bags and cases, for anyone who would rather nobody "
+                + "ran past holding a television.");
 
             AddToggle(_lootMenu, "Steal Cars", "features.looting.stealVehicles", true,
                 "Some looters take a parked car instead. Empty cars only.");
@@ -533,26 +625,36 @@ namespace TonightsTheNight.Menu
                 "Off by default. On, a mode may change your weather and colour grade. Your clock is " +
                 "left alone either way unless you turn on features.ambience.setTime.");
 
+            AddToggle(_featuresMenu, "Stop When You Die", "riot.stopOnPlayerDeath", true,
+                "A riot is something that happened to you, and dying ends your part in it. Off, it "
+                + "carries on through the respawn - you get up in a hospital in a city that is "
+                + "still on fire, which is a legitimate thing to want and a poor default.");
+
             AddToggle(_featuresMenu, "Purge Timer", "features.purge.enabled", true,
-                "The countdown in Purge mode. Off makes it run indefinitely.");
+                "The countdown, the final warning and the siren that ends it. Off makes The Purge "
+                + "run indefinitely, which is a mode of its own but not the one it says it is.");
+
+            AddToggle(_featuresMenu, "Purge Countdown On Screen", "features.purge.showTimer", true,
+                "The clock, top centre. The most direct available answer to 'does this ever end'.");
+
+            AddRangeSlider(_featuresMenu, "Purge Wind-Down", "features.purge.windDownSeconds", 25, 0, 90, 5,
+                "Seconds after the siren before the mode lets go. Nothing new arrives and what is "
+                + "out there is talked down, so the event ends rather than being cut.");
+
+            AddToggle(_featuresMenu, "Wave Counter On Screen", "features.manhunt.showWave", true,
+                "Which wave you are on during Car Chase, and how many are currently after you.");
+
+            AddToggle(_featuresMenu, "Contagion", "features.contagion.enabled", true,
+                "Whether an infection can spread from person to person. Off, Patient Zero is an "
+                + "ordinary riot between a few infected and everybody else.");
 
             AddToggle(_featuresMenu, "No Wanted Level During Purge", "features.purge.noWantedLevel", true,
                 "All crime is legal, so the game's own police lose interest. Your wanted ceiling is " +
                 "put back exactly as it was when the purge ends.");
 
-            AddToggle(_featuresMenu, "Blackout", "features.spectacle.blackout", true,
-                "The city's power fails in the late phases. Street lights, shop signs and windows, "
-                + "the whole map. At night the difference is total.");
-
             AddToggle(_featuresMenu, "Barricades", "features.spectacle.barricades", true,
                 "Rioters drag street furniture across the roads and set it alight. Cars can still "
                 + "smash through - that is the point of them being props rather than walls.");
-
-            AddToggle(_featuresMenu, "Smoke Columns", "features.spectacle.smoke", true,
-                "Smoke rising off the burning barricades, visible from the other side of the map.");
-
-            AddToggle(_featuresMenu, "Helicopter Searchlights", "features.air.searchlight", true,
-                "Sweeping a blacked-out street is most of what a helicopter is for.");
 
             AddToggle(_featuresMenu, "Reinforcements", "features.reinforcements.enabled", true,
                 "Factions that take losses send bigger waves, sooner. Off: the response never grows.");
@@ -611,6 +713,322 @@ namespace TonightsTheNight.Menu
             menu.Add(item);
             _refreshers.Add(() =>
                 item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString("player.stance", "mode"))));
+        }
+
+        /// <summary>
+        /// The city's power, which is the single largest change this mod can make to how a
+        /// street looks for one native call.
+        /// </summary>
+        private void BuildPowerMenu()
+        {
+            _powerMenu = new NativeMenu("Tonight's The Night", "BLACKOUT & POWER");
+            _pool.Add(_powerMenu);
+            AddSubMenu(_powerMenu, "Blackout & Power", "When the lights go out, and how far it reaches.");
+
+            AddToggle(_powerMenu, "Blackout", "features.spectacle.blackout", true,
+                "Street lights, shop signs and window light across the whole map. At night the "
+                + "difference is total.");
+
+            AddPicker(_powerMenu, "When", "features.spectacle.blackoutWhen",
+                new[] { "Never", "When The Mode Asks", "From The Start" },
+                new[] { "never", "phase", "always" },
+                "When The Mode Asks waits for a riot to escalate far enough that its author "
+                + "declared a blackout - which for most modes is three quarters of the way in. "
+                + "From The Start makes it the premise instead.");
+
+            AddToggle(_powerMenu, "Flicker", "features.spectacle.blackoutFlicker", true,
+                "The grid coming back for half a second and going again. Most of the difference "
+                + "between 'the lights are off' and 'something is wrong with the city'.");
+
+            AddRangeSlider(_powerMenu, "Seconds Between Flickers", "features.spectacle.blackoutFlickerMs",
+                9000, 2000, 30000, 1000,
+                "Roughly. Each one is jittered so it does not read as a metronome.");
+
+            AddToggle(_powerMenu, "Headlights Too", "features.spectacle.blackoutVehicles", false,
+                "On: vehicle lights go out with everything else. Total darkness, and almost "
+                + "unplayable at night, which is either the point or a reason to leave this off.");
+
+            AddToggle(_powerMenu, "Smoke Columns", "features.spectacle.smoke", true,
+                "Smoke rising off the burning barricades, visible from the other side of the map.");
+
+            AddToggle(_powerMenu, "Helicopter Searchlights", "features.air.searchlight", true,
+                "Sweeping a blacked-out street is most of what a helicopter is for.");
+        }
+
+        /// <summary>
+        /// The one mode that is a fight rather than a riot. Every number here changes the shape
+        /// of that fight, so they are all in one place with what they cost written next to them.
+        /// </summary>
+        private void BuildHunterMenu()
+        {
+            _hunterMenu = new NativeMenu("Tonight's The Night", "THE HUNTER");
+            _pool.Add(_hunterMenu);
+            AddSubMenu(_hunterMenu, "The Hunter", "The thing in Tonight's The Night, and how hard it is.");
+
+            AddToggle(_hunterMenu, "Hunter", "features.hunter.enabled", true,
+                "Off: Tonight's The Night runs as an ordinary night with nothing hunting you, "
+                + "which is not much of a mode.");
+
+            AddRangeSlider(_hunterMenu, "Resolve", "features.hunter.resolve", 2400, 600, 6000, 200,
+                "The pool that actually has to be emptied. Its real health is pinned and means "
+                + "nothing; this is the fight's length.");
+
+            AddPercentSlider(_hunterMenu, "Damage While Armoured", "features.hunter.armouredMultiplier", 0.2f,
+                "What ordinary hits are worth outside a stagger. Low is the point: it is what "
+                + "makes the openings matter rather than being optional.");
+
+            AddPercentSlider(_hunterMenu, "Damage While Exposed", "features.hunter.vulnerableMultiplier", 1f,
+                "What hits are worth during a stagger. This is where the fight is won.");
+
+            AddRangeSlider(_hunterMenu, "Sustained Fire To Stagger", "features.hunter.breakThreshold",
+                900, 200, 3000, 100,
+                "Raw damage needed to break through and force an opening. The route for a player "
+                + "with good aim and no explosives. Lower is kinder.");
+
+            AddToggle(_hunterMenu, "Time Slows When It Moves", "features.hunter.timeSlow", true,
+                "Everything else slowing down while it does not. Brief, rare and self-restoring - "
+                + "but it is a global, so here is the switch.");
+
+            AddToggle(_hunterMenu, "It Kills What It Passes", "features.hunter.cull", true,
+                "Anybody standing near it stops standing near it. Rate-limited hard: the point is "
+                + "a trail behind it rather than an empty district.");
+
+            AddToggle(_hunterMenu, "Show Its Health", "features.hunter.showBar", true,
+                "The bar, the percentage and the range. Off makes the fight considerably harder to "
+                + "read, which is a legitimate way to play it.");
+
+            AddToggle(_hunterMenu, "Blip It", "features.hunter.blip", true,
+                "A flashing marker on the minimap. Off and you have to listen for it.");
+
+            AddRangeSlider(_hunterMenu, "How Far It Lets You Get", "features.hunter.leashDistance",
+                220, 80, 600, 20,
+                "Past this it stops walking and starts arriving. Losing it is allowed; losing it "
+                + "permanently is not.");
+        }
+
+        /// <summary>
+        /// Building a loadout without leaving the game.
+        ///
+        /// This used to be a menu item that explained how to write a JSON array into user.json,
+        /// which is a fine thing to offer somebody already editing config and a useless thing to
+        /// offer anybody on a controller. The setting is identical - it is still weapons.custom
+        /// in the live config layer - so a loadout built here can still be saved to a profile,
+        /// read back from a file, or hand-written by anyone who prefers to.
+        /// </summary>
+        private void BuildLoadoutMenu()
+        {
+            _loadoutMenu = new NativeMenu("Tonight's The Night", "CUSTOM LOADOUT");
+            _pool.Add(_loadoutMenu);
+            AddSubMenu(_weaponMenu, _loadoutMenu, "Custom Loadout",
+                "Build your own list of what the crowd is carrying, weapon by weapon.");
+
+            _pickerMenu = new NativeMenu("Tonight's The Night", "ADD A WEAPON");
+            _pool.Add(_pickerMenu);
+            Style(_pickerMenu);
+
+            foreach (WeaponCategory category in WeaponCatalog.Categories)
+            {
+                var categoryMenu = new NativeMenu("Tonight's The Night", category.Name.ToUpperInvariant());
+                _pool.Add(categoryMenu);
+
+                AddSubMenu(_pickerMenu, categoryMenu, category.Name, "Add one of these to the loadout.");
+
+                foreach (CatalogWeapon weapon in category.Weapons)
+                {
+                    CatalogWeapon captured = weapon;
+                    var item = new NativeItem(weapon.Label, "Add " + weapon.Label + " to the custom loadout.");
+                    item.Activated += (sender, args) => AddToLoadout(captured.Name);
+                    categoryMenu.Add(item);
+                }
+            }
+
+            // Built once. Only the weapon rows are rebuilt when the loadout changes, because
+            // the sliders below register themselves with the refresher list - rebuilding the
+            // whole page every time a weapon was added would grow that list without bound and
+            // leave it pointing at controls no longer on screen.
+            var use = new NativeItem("Use This Loadout",
+                "Switches the weapon preset to Custom. Without this the list is built but not used.");
+            use.Activated += (sender, args) =>
+            {
+                _config.SetLive("weapons.preset", JsonValue.Of("custom"));
+                WeaponPresets.Reset();
+                GTA.UI.Notification.Show("~g~Custom loadout~s~ is now in use.");
+                Rebuild();
+            };
+            _loadoutMenu.Add(use);
+
+            AddSubMenu(_loadoutMenu, _pickerMenu, "Add A Weapon", "Base-game weapons, by category.");
+
+            var weight = new NativeSliderItem("Weight For The Next One",
+                "How common the next weapon you add is, relative to the others. Four is four times "
+                + "as likely as one.", 10, Math.Max(0, _nextWeight - 1));
+            weight.ValueChanged += (sender, args) => _nextWeight = weight.Value + 1;
+            _loadoutMenu.Add(weight);
+
+            AddRangeSlider(_loadoutMenu, "Ammunition", "weapons.customAmmo", 120, 0, 500, 20,
+                "Rounds handed out with the weapon. Melee ignores it.");
+
+            AddRangeSlider(_loadoutMenu, "Body Armour", "weapons.customArmour", 0, 0, 100, 5,
+                "How much punishment they take before it starts counting. Part of the loadout, "
+                + "because 'armed and armoured' is a different event from 'armed'.");
+
+            AddPercentSlider(_loadoutMenu, "How Many Are Armed", "weapons.customArmedChance", 1f,
+                "The rest go out empty-handed and fight anyway.");
+
+            var clear = new NativeItem("Clear The Loadout", "Removes every weapon from the list.");
+            clear.Activated += (sender, args) =>
+            {
+                _config.SetLive("weapons.custom", JsonValue.NewArray());
+                WeaponPresets.Reset();
+                PopulateLoadout();
+            };
+            _loadoutMenu.Add(clear);
+
+            _loadoutMenu.Add(new NativeItem("Keeping It",
+                "A loadout lives in the live settings layer, so it lasts the session. Save it to a "
+                + "profile slot to keep it, or copy weapons.custom into user.json by hand."));
+
+            PopulateLoadout();
+        }
+
+        /// <summary>Marks the rows this page rebuilds, as opposed to the controls it does not.</summary>
+        private const string LoadoutRow = "loadout-entry";
+
+        /// <summary>Where the weapon rows sit: after Use, Add A Weapon and the weight slider.</summary>
+        private const int LoadoutRowStart = 3;
+
+        /// <summary>
+        /// Rebuilt from the config every time it changes, rather than kept in a parallel list.
+        /// The config is the loadout; anything else here would be a second copy to disagree with.
+        /// </summary>
+        private void PopulateLoadout()
+        {
+            if (_loadoutMenu == null) { return; }
+
+            _loadoutMenu.Remove(item => item.Tag as string == LoadoutRow);
+
+            List<JsonValue> entries = Loadout();
+            int at = LoadoutRowStart;
+
+            if (entries.Count == 0)
+            {
+                var empty = new NativeItem("Nothing In It Yet",
+                    "Add a weapon above. An empty custom loadout falls back to each mode's own.");
+                empty.Tag = LoadoutRow;
+                _loadoutMenu.Add(at, empty);
+                return;
+            }
+
+            for (int i = 0; i < entries.Count; i++)
+            {
+                int index = i;
+                string name = entries[i]["name"].AsString("?");
+                double entryWeight = entries[i]["weight"].AsDouble(1);
+
+                var item = new NativeItem(WeaponCatalog.LabelFor(name),
+                    "Weight " + entryWeight + ". Select to remove it from the loadout.",
+                    "x" + entryWeight);
+
+                item.Tag = LoadoutRow;
+                item.Activated += (sender, args) => RemoveFromLoadout(index);
+                _loadoutMenu.Add(at++, item);
+            }
+        }
+
+        /// <summary>The current custom loadout, normalised so every entry has a name and a weight.</summary>
+        private List<JsonValue> Loadout()
+        {
+            var entries = new List<JsonValue>();
+
+            foreach (JsonValue entry in _config.Resolve("weapons.custom").Items)
+            {
+                JsonValue normalised = JsonValue.NewObject();
+
+                if (entry.IsObject)
+                {
+                    string name = entry["name"].AsString(null);
+                    if (name == null) { continue; }
+
+                    normalised.Set("name", JsonValue.Of(name));
+                    normalised.Set("weight", JsonValue.Of(entry["weight"].AsDouble(1)));
+                }
+                else
+                {
+                    string name = entry.AsString(null);
+                    if (name == null) { continue; }
+
+                    normalised.Set("name", JsonValue.Of(name));
+                    normalised.Set("weight", JsonValue.Of(1));
+                }
+
+                entries.Add(normalised);
+            }
+
+            return entries;
+        }
+
+        private void AddToLoadout(string gameName)
+        {
+            List<JsonValue> entries = Loadout();
+
+            foreach (JsonValue entry in entries)
+            {
+                if (!string.Equals(entry["name"].AsString(""), gameName, StringComparison.OrdinalIgnoreCase)) { continue; }
+
+                // Already there: raise its weight rather than listing it twice, which the picker
+                // would otherwise make very easy to do by accident.
+                entry.Set("weight", JsonValue.Of(entry["weight"].AsDouble(1) + _nextWeight));
+                Commit(entries);
+                GTA.UI.Notification.Show("~g~" + WeaponCatalog.LabelFor(gameName) + "~s~ is now weight " +
+                                         entry["weight"].AsDouble(1) + ".");
+                return;
+            }
+
+            JsonValue added = JsonValue.NewObject();
+            added.Set("name", JsonValue.Of(gameName));
+            added.Set("weight", JsonValue.Of(_nextWeight));
+            entries.Add(added);
+
+            Commit(entries);
+            GTA.UI.Notification.Show("~g~Added~s~ " + WeaponCatalog.LabelFor(gameName) + ".");
+        }
+
+        private void RemoveFromLoadout(int index)
+        {
+            List<JsonValue> entries = Loadout();
+            if (index < 0 || index >= entries.Count) { return; }
+
+            entries.RemoveAt(index);
+            Commit(entries);
+        }
+
+        private void Commit(List<JsonValue> entries)
+        {
+            JsonValue list = JsonValue.NewArray();
+            foreach (JsonValue entry in entries) { list.Add(entry); }
+
+            _config.SetLive("weapons.custom", list);
+            // The preset caches its table, so without this the next recruit is armed from the
+            // list as it was before the edit.
+            WeaponPresets.Reset();
+            PopulateLoadout();
+        }
+
+        /// <summary>A list of labelled choices writing one of a fixed set of values to config.</summary>
+        private void AddPicker(NativeMenu menu, string title, string path, string[] labels, string[] values, string description)
+        {
+            var item = new NativeListItem<string>(title, description, labels);
+            item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString(path, values[0])));
+
+            item.ItemChanged += (sender, args) =>
+            {
+                if (_refreshing) { return; }
+                _config.SetLive(path, JsonValue.Of(values[item.SelectedIndex]));
+            };
+
+            menu.Add(item);
+            _refreshers.Add(() =>
+                item.SelectedIndex = Math.Max(0, Array.IndexOf(values, _config.GetString(path, values[0]))));
         }
 
         private void AddToggle(NativeMenu menu, string title, string path, bool fallback, string description)
@@ -677,6 +1095,7 @@ namespace TonightsTheNight.Menu
         public void Rebuild()
         {
             PopulateModes();
+            PopulateLoadout();
 
             _refreshing = true;
             try

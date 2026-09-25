@@ -138,6 +138,17 @@ namespace TonightsTheNight.Core
             float armedChance = preset != null ? preset.ArmedChance : faction.ArmedChance;
             int ammo = preset != null ? preset.Ammo : faction.Ammo;
 
+            // Before the roll, and before the table is consulted at all. A faction declared
+            // unarmed was still full of armed people, because conversion never took anything
+            // away - it only ever added - and an ambient pedestrian who was already carrying
+            // simply kept it. A preset the player chose outranks this: picking "military" is an
+            // explicit instruction to arm the crowd.
+            if (preset == null && faction.Disarm)
+            {
+                try { Function.Call(Hash.REMOVE_ALL_PED_WEAPONS, ped, true); }
+                catch (Exception ex) { Log.Error("Could not disarm a " + faction.Id + " ped", ex); }
+            }
+
             if (table.Count == 0) { return; }
             if (_random.NextDouble() > armedChance) { return; }
 
@@ -147,7 +158,7 @@ namespace TonightsTheNight.Core
             // line naming the weapon that would not take.
             for (int attempt = 0; attempt < 3; attempt++)
             {
-                if (TryArm(ped, table.Pick(_random), ammo)) { return; }
+                if (TryArm(ped, PickWeapon(table), ammo)) { return; }
             }
 
             if (TryArm(ped, "WEAPON_PISTOL", ammo)) { return; }
@@ -157,6 +168,38 @@ namespace TonightsTheNight.Core
                 Log.Warn("Faction '" + faction.Id + "' could not be armed from its own loadout " +
                          "or the fallback. Its members will fight unarmed.");
             }
+        }
+
+        /// <summary>
+        /// A weapon from the table, with heavy ones held to a separate quota.
+        ///
+        /// A weight is a share of a faction, not a rarity, and the two are easy to confuse when
+        /// writing a loadout: an RPG at weight 1 against a machine gun at weight 3 looks like a
+        /// garnish and arms a quarter of the column with rocket launchers. By the last phase of
+        /// Martial Law that is a street where nothing survives, which is a legitimate thing to
+        /// want and a terrible thing to be given by default.
+        ///
+        /// So a heavy pick is re-rolled unless it wins a separate roll. One slider covers every
+        /// mode, including ones nobody here wrote.
+        /// </summary>
+        private string PickWeapon(WeaponTable table)
+        {
+            string choice = table.Pick(_random);
+
+            float allowed = _config.GetFloat("combat.heavyWeaponChance", 0.35f);
+            if (allowed >= 1f || !WeaponCatalog.IsHeavy(choice)) { return choice; }
+
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                if (_random.NextDouble() < allowed) { return choice; }
+
+                string lighter = table.Pick(_random);
+                if (!WeaponCatalog.IsHeavy(lighter)) { return lighter; }
+            }
+
+            // A table of nothing but heavy weapons is a deliberate choice, and re-rolling it
+            // forever would silently disarm the faction instead.
+            return choice;
         }
 
         /// <summary>

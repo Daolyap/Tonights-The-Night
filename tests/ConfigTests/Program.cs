@@ -156,6 +156,9 @@ class Program
         Console.WriteLine("--- the shipped weapon presets ---");
         failures += WeaponPresetTests.Run();
 
+        Console.WriteLine("--- the shipped content ---");
+        failures += ContentTests.Run();
+
         Console.WriteLine("--- every config path the code reads is declared in defaults ---");
         failures += ConfigPathCoverage.Run();
 

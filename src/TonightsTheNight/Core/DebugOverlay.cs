@@ -45,6 +45,30 @@ namespace TonightsTheNight.Core
                 {
                     sb.AppendLine("chases: " + director.Pursuit.ActiveChases + " (" + director.Pursuit.Started +
                                   " total)   looting: " + director.Looting.Active + " (" + director.Looting.Total + " total)");
+                    sb.AppendLine("engaging you: " + director.Attention.Engaged + "   sent elsewhere: " + director.Attention.Trimmed +
+                                  "   craft: " + director.Craft.Active +
+                                  (director.Manhunt.Active ? "   wave: " + director.Manhunt.Wave : ""));
+
+                    if (director.Contagion.Active)
+                    {
+                        // The two halves separately, because they answer different questions:
+                        // how well the visible spread is going, and how far gone the city is
+                        // underneath it.
+                        sb.AppendLine("infected: " + director.Contagion.Alive + " alive   " +
+                                      director.Contagion.Converted + " by contact   " +
+                                      director.Contagion.Seeded + " already had it   " +
+                                      director.Contagion.Suppressed + " put down");
+                        sb.AppendLine("outbreak: " + (int)(director.Contagion.Prevalence * 100) + "%   front " +
+                                      (int)director.Contagion.Front + "m   here " +
+                                      (int)(director.Contagion.SeedChance(GTA.Game.Player.Character.Position) * 100) + "%");
+                    }
+
+                    if (director.Hunter.Active)
+                    {
+                        sb.AppendLine("hunter: phase " + director.Hunter.Phase + "   resolve " +
+                                      (int)director.Hunter.Resolve + "/" + (int)director.Hunter.ResolveMax +
+                                      (director.Hunter.Vulnerable ? "   ~y~EXPOSED~s~" : ""));
+                    }
                 }
             }
 
