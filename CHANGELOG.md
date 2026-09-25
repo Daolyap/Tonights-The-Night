@@ -1,5 +1,102 @@
 # Changelog
 
+## v1.1.0 — the playtest pass
+
+Three things came back from playing it: the boss fought itself, the outbreak only existed where
+you were standing, and a chase could be won by pressing the accelerator. All three were the same
+kind of bug — a mechanic that worked at the speed and scale it was written at and nowhere else.
+
+### Fixed — the boss knocked himself over with his own attacks
+
+`ADD_EXPLOSION` was being raised at his feet for the ground slam, with zero damage and a comment
+saying it was invisible. It was not invisible — that is the fireball in every screenshot — and an
+explosion applies its impulse to **everything** in radius including whoever raised it. So he set
+bystanders alight and put himself on his back with his own move, roughly every eight seconds, for
+the entire fight.
+
+Nothing he does is an explosion now. The shove is a force applied per entity, aimed, so it can
+never reach him. And the recovery window plants him upright instead of ragdolling him: ragdoll is
+switched *on* for its duration so a heavy hit you land does put him down, which is the reward the
+window was supposed to be and was not. `features.hunter.staggerRagdoll` turns the flop back on.
+
+### Fixed — the charge could not be dodged
+
+It re-aimed at the player every frame. Running, driving, diving and turning therefore all failed
+identically: the line moved with you, and the only counter left was being unable to take damage.
+
+Every heavy move is announced now — he plants, turns to face you, and a ring appears under him
+for a beat before anything happens — and the charge commits to the line it launched on, steering
+at a fixed rate afterwards. That is fast enough to follow somebody jogging and not fast enough to
+follow somebody who changes direction. Missing costs him a longer opening than connecting does,
+so reading the tell is worth something beyond not being hit.
+
+### Added — a fight rather than a lunge
+
+Four moves, each with a different answer: a charge you step off, a ground strike you get out of,
+a swing you get behind, and — once he has been hurt — something out of the street thrown at your
+head, which is a real prop with real physics that can be sidestepped or shot. Between them he
+hits with his hands. The bar names what he is doing, for when you cannot see the ground.
+
+### Changed — he is not exclusively yours
+
+The old behaviour was a silent five-metre radius that set anybody inside it to zero health. It
+read as a script with one line in it. He picks targets now: anything meaningfully closer to him
+than you are is a detour he takes for a few seconds before coming back, and he kills them with
+the moves he has. Those seconds are the only breathing room the mode has.
+
+`features.hunter.cull`, `cullIntervalMs`, `cullRadius` and `fx.slamExplosion` are gone.
+
+### Fixed — the outbreak only existed where you were standing
+
+Contact spread runs on the tracked list, and the tracked list is a couple of hundred metres wide.
+So driving four blocks ended the outbreak and driving back found the district clean. It was not
+being contained; it was being un-witnessed.
+
+There are two layers now. Contact spread is unchanged and still does the visible work in front of
+you. Underneath it an epidemic runs on the clock — an origin, a front that widens whether or not
+anybody is watching, and a prevalence on a logistic curve — and anybody the riot takes over inside
+that front may already be infected. Leaving buys you time and nothing else. It does not end on its
+own either: prevalence has a floor, so it can be pushed back and not eradicated.
+
+Containment is real and local: every infected put down thins the seeding on that patch of city for
+a while. Holding a street is a thing you can do. Holding the county is not.
+
+### Fixed — the zombies had guns
+
+Conversion only ever *added* a weapon, so an ambient pedestrian who was already carrying kept it.
+An infected with a pistol is not an infected, it is a person with a gun, and a street of them is
+two crowds having a firefight — which is what Patient Zero looked like and the opposite of what it
+was for.
+
+Factions take a `disarm` flag, defaulted from `armedChance`, so a faction declared unarmed
+actually is one. The infected now carry nothing at all, the uninfected mostly run and the few who
+stand carry a bat, and the only people with firearms are the cordon — which is what makes them
+read as the army arriving rather than as more of the crowd.
+
+### Added — how many of them there are
+
+The infected count lived in the log file. It is on screen now: how many are around you, how many
+the outbreak has taken, how many you have put down, and how much of the district is gone.
+
+### Fixed — nobody could catch you above a hundred kilometres an hour
+
+A wave arrives on a bearing picked at random from a ring around the player and drives at whatever
+its car will do. At fifty metres a second the player crosses the whole spawn ring in five seconds,
+so most of every wave arrived somewhere they had already left, and the ones that did not were in a
+Manana chasing a supercar. Nobody ever turned up behind you.
+
+Above about 65 km/h: arrivals **arrive moving**, at nine tenths of the player's speed, instead of
+being created stationary and spending their first four seconds losing ground — that one is most
+of the fix. On top of it, arrivals are measured from where the player is going rather than where
+they are; three quarters of them are placed behind on the line they are actually travelling — not
+all, or the road ahead would be guaranteed safe; waves come due sooner; a pursuit follows further
+before giving up; and drivers are given a cruise speed scaled to how fast the thing they are
+chasing is going. Crews board on foot only when there is time for it; at speed they are already in
+the car. All of it switches off below the threshold, and every vehicle gets its standard engine
+back when it is released.
+
+New settings live in `features.interception`.
+
 ## v1.0.0 — the release
 
 Twelve modes, two of which are not riots at all, and a pass over every complaint from the first

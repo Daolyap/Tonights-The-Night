@@ -138,6 +138,17 @@ namespace TonightsTheNight.Core
             float armedChance = preset != null ? preset.ArmedChance : faction.ArmedChance;
             int ammo = preset != null ? preset.Ammo : faction.Ammo;
 
+            // Before the roll, and before the table is consulted at all. A faction declared
+            // unarmed was still full of armed people, because conversion never took anything
+            // away - it only ever added - and an ambient pedestrian who was already carrying
+            // simply kept it. A preset the player chose outranks this: picking "military" is an
+            // explicit instruction to arm the crowd.
+            if (preset == null && faction.Disarm)
+            {
+                try { Function.Call(Hash.REMOVE_ALL_PED_WEAPONS, ped, true); }
+                catch (Exception ex) { Log.Error("Could not disarm a " + faction.Id + " ped", ex); }
+            }
+
             if (table.Count == 0) { return; }
             if (_random.NextDouble() > armedChance) { return; }
 

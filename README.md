@@ -6,7 +6,7 @@ Twelve modes built from **factions** — who they are, what they carry, who they
 react when it starts. Modes and factions are JSON files, not code, so a custom faction needs no
 build step. Every optional feature is a switch with its own settings block.
 
-**Version 1.0.0.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
+**Version 1.1.0.** Requires [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/),
 ScriptHookVDotNet 3 and [LemonUI](https://www.gta5-mods.com/tools/lemonui). **F6** opens the
 menu.
 
@@ -35,14 +35,32 @@ while it is staggered — and staggering it is a consequence of what it does, no
 force. Survive the ability, punish the recovery. Sustained fire opens it up on its own, and a big
 hit always counts for more than its share, so the rocket launcher in your boot matters.
 
+It fights with its hands and with whatever is lying in the road. Four heavy moves — a charge, a
+ground strike, a swing, a thrown barrel — each announced by a ring under its feet a moment
+before it lands, each with a different answer, and each costing it more when it misses than when
+it connects. It is also not exclusively yours: anything standing between it and you is a body it
+will stop to make, and those few seconds are the only breathing room the mode has.
+
 **An infection that spreads.** Every other mode is fed by converting the crowd near you and by
 spawning, both capped. Patient Zero grows where its members physically are, so it moves outward,
 thins where it is being killed, and gets worse the longer it is left.
+
+Underneath that, an epidemic runs on the clock: an origin, a widening front and a prevalence
+curve that does not care whether anybody is watching. People the riot reaches inside that front
+may already be infected when you meet them, so driving away buys you time and nothing else, and
+the street you cleared an hour ago is not the street you left. The infected carry nothing — not
+even the weapon they happened to have before it found them — and the count is on screen.
 
 **Car chases.** Hurt someone and drive away, and their side comes after you — a whole carload of
 them, who run to the same vehicle and get in before it sets off. Passengers lean out and shoot.
 Or pick Car Chase and skip the provocation: five waves of escalation, counted from your own body
 count rather than a timer.
+
+Above about 65 km/h it stops being polite about it. Cars arrive already moving at your speed
+rather than from a standstill, they are measured from where you are going rather than from where
+you are, they are placed behind you on the road you are actually on, and they are given the
+cruise speed they need to still be there in ten seconds. Nobody boards on foot while you are
+doing a hundred and forty.
 
 **Rioters who drive.** Someone already behind a wheel decides for themselves: get out and fight,
 chase another rioter, come after you, or get out of your way. Four weights, all sliders.

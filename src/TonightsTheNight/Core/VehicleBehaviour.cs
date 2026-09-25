@@ -90,13 +90,25 @@ namespace TonightsTheNight.Core
                     ? _config.GetFloat("features.police.playerStandoff", 15f)
                     : _config.GetFloat("features.police.targetReachedDistance", 5f);
 
+                float cruise = _config.GetFloat("features.police.cruiseSpeed", 45f);
+
+                // The first task a spawned unit gets, and for twelve seconds the only one. A
+                // wave that arrives behind a player doing a hundred and forty and is then told
+                // to cruise at a hundred and sixty is a wave that never gets any closer, which
+                // is what "they do not drive quick enough to start chasing you" was.
+                if (afterPlayer)
+                {
+                    Interception.Boost(_config, vehicle);
+                    cruise = Interception.Cruise(_config, cruise);
+                }
+
                 // Mission type and driving style are community-documented rather than official,
                 // so both are config-exposed: if the driving reads wrong, it is a config edit
                 // and a reload rather than a new build.
                 Function.Call(Hash.TASK_VEHICLE_MISSION_PED_TARGET,
                     driver, vehicle, target,
                     mission,
-                    _config.GetFloat("features.police.cruiseSpeed", 45f),
+                    cruise,
                     _config.GetInt("features.police.drivingStyle", 786603),
                     reached,
                     _config.GetFloat("features.police.straightLineDistance", 8f),

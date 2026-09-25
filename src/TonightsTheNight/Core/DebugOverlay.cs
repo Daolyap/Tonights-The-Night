@@ -47,8 +47,21 @@ namespace TonightsTheNight.Core
                                   " total)   looting: " + director.Looting.Active + " (" + director.Looting.Total + " total)");
                     sb.AppendLine("engaging you: " + director.Attention.Engaged + "   sent elsewhere: " + director.Attention.Trimmed +
                                   "   craft: " + director.Craft.Active +
-                                  (director.Contagion.Active ? "   infected: " + director.Contagion.Converted : "") +
                                   (director.Manhunt.Active ? "   wave: " + director.Manhunt.Wave : ""));
+
+                    if (director.Contagion.Active)
+                    {
+                        // The two halves separately, because they answer different questions:
+                        // how well the visible spread is going, and how far gone the city is
+                        // underneath it.
+                        sb.AppendLine("infected: " + director.Contagion.Alive + " alive   " +
+                                      director.Contagion.Converted + " by contact   " +
+                                      director.Contagion.Seeded + " already had it   " +
+                                      director.Contagion.Suppressed + " put down");
+                        sb.AppendLine("outbreak: " + (int)(director.Contagion.Prevalence * 100) + "%   front " +
+                                      (int)director.Contagion.Front + "m   here " +
+                                      (int)(director.Contagion.SeedChance(GTA.Game.Player.Character.Position) * 100) + "%");
+                    }
 
                     if (director.Hunter.Active)
                     {

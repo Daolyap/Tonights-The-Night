@@ -152,7 +152,7 @@ namespace TonightsTheNight.Core
                     // the threat - they are behind you, and the passengers still lean out.
                     Function.Call(Hash.TASK_VEHICLE_MISSION_PED_TARGET,
                         ped, vehicle, player, _config.GetInt("vehicles.playerMission", 7),
-                        _config.GetFloat("vehicles.chaseSpeed", 55f),
+                        Interception.Cruise(_config, _config.GetFloat("vehicles.chaseSpeed", 55f)),
                         _config.GetInt("vehicles.drivingStyle", 786603),
                         _config.GetFloat("vehicles.playerStandoff", 12f), 20f, true);
                 }
@@ -163,6 +163,16 @@ namespace TonightsTheNight.Core
                 }
 
                 Function.Call(Hash.SET_PED_KEEP_TASK, ped, true);
+
+                // The engine, for the one case that needs it. A driver told to chase somebody
+                // travelling faster than his car will go obeys perfectly and still loses them,
+                // which is what "they never catch up" actually was.
+                if (afterPlayer)
+                {
+                    Interception.Boost(_config, vehicle);
+                    Interception.Drive(_config, ped, _config.GetFloat("vehicles.chaseSpeed", 55f));
+                }
+
                 NoteHunting(ped, afterPlayer);
                 return true;
             }
